@@ -227,7 +227,7 @@ best development experience:
 ## Repository structure
 
 ```text
-stm32-project-template
+stm32-project-template-v2
 ├── .devcontainer
 ├── .github
 │   └── workflows

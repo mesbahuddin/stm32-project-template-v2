@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(stm32-project-template)
+project(stm32-project-template-v2)
 enable_language(C CXX ASM)
 
 # Set the following variable to `ON` to print all cmake variables

@@ -199,11 +199,11 @@ remember compiler flags.
 
 #### Section 1: Project Setup (lines 1–21)
 
-> **Note**: When forking this project, change `stm32-project-template` to your project name.
+> **Note**: When forking this project, change `stm32-project-template-v2` to your project name.
 
 ```cmake
 cmake_minimum_required(VERSION 3.22)
-project(stm32-project-template)
+project(stm32-project-template-v2)
 enable_language(C CXX ASM)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)   # Generates compile_commands.json
