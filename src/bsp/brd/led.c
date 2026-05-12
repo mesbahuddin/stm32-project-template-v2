@@ -4,7 +4,7 @@
  *******************************************************************************
  * @file
  * @author    Akos Pasztor, Mesbah Uddin
- * @brief     This file contains the button driver implementation.
+ * @brief     This file contains the LED driver implementation.
  *******************************************************************************
  * @copyright (c) 2024 Akos Pasztor. https://akospasztor.com
  *            This software is licensed under terms that can be found in the
@@ -13,10 +13,10 @@
  */
 
 /* Includes ------------------------------------------------------------------*/
-#include "button.h"
+#include "bsp/brd/led.h"
 
-#include "gpio.h"
-#include "rcc.h"
+#include "bsp/core/gpio.h"
+#include "bsp/core/rcc.h"
 
 /* Defines -------------------------------------------------------------------*/
 // Message:     A conversion should not be performed between a pointer to
@@ -29,31 +29,66 @@
 //              resulting in undefined behavior.
 // Prevention:  Code reviews.
 
-/** GPIO port of the joystick center button. */
 // cppcheck-suppress-macro [misra-c2012-11.4]
-#define BUTTON_GPIO_PORT GPIOC
+#define LED_LD2_GPIO_PORT GPIOB /**< GPIO port of the LD2 LED. */
+// cppcheck-suppress-macro [misra-c2012-11.4]
+#define LED_LD2_GPIO_PIN GPIO_PIN_13 /**< GPIO pin of the LD2 LED. */
 
-/** GPIO pin of the joystick center button. */
 // cppcheck-suppress-macro [misra-c2012-11.4]
-#define BUTTON_GPIO_PIN GPIO_PIN_13
+#define LED_LD3_GPIO_PORT GPIOA /**< GPIO port of the LD3 LED. */
+// cppcheck-suppress-macro [misra-c2012-11.4]
+#define LED_LD3_GPIO_PIN GPIO_PIN_5 /**< GPIO pin of the LD3 LED. */
 
 /* Functions -----------------------------------------------------------------*/
 /**
- * @brief  Initialize the center button of the joystick (B2) on the discovery
- *         board.
+ * @brief  Initialize the LD2 LED.
  */
-void ButtonInit(void)
+void LedInitLd2(void)
 {
-    RccEnablePortC();
-    GpioConfigureDigitalInWithPullDown(BUTTON_GPIO_PORT, BUTTON_GPIO_PIN);
+    RccEnablePortB();
+
+    GpioSetHigh(LED_LD2_GPIO_PORT, LED_LD2_GPIO_PIN);
+    GpioConfigureDigitalOut(LED_LD2_GPIO_PORT, LED_LD2_GPIO_PIN);
+}
+/**
+ * @brief  Initialize the LD3 LED.
+ */
+void LedInitLd3(void)
+{
+    RccEnablePortA();
+
+    GpioSetLow(LED_LD3_GPIO_PORT, LED_LD3_GPIO_PIN);
+    GpioConfigureDigitalOut(LED_LD3_GPIO_PORT, LED_LD3_GPIO_PIN);
 }
 
 /**
- * @brief  Get whether the button is pressed.
- *
- * @return True if the button is pressed, otherwise false.
+ * @brief  Turn on the LD2 LED.
  */
-bool ButtonIsPressed(void)
+void LedLd2On(void)
 {
-    return GpioIsHigh(BUTTON_GPIO_PORT, BUTTON_GPIO_PIN);
+    GpioSetLow(LED_LD2_GPIO_PORT, LED_LD2_GPIO_PIN);
+}
+
+/**
+ * @brief  Turn off the LD2 LED.
+ */
+void LedLd2Off(void)
+{
+    GpioSetHigh(LED_LD2_GPIO_PORT, LED_LD2_GPIO_PIN);
+}
+
+/**
+ * @brief  Turn on the LD3 LED.
+ */
+void LedLd3On(void)
+{
+    GpioSetHigh(LED_LD3_GPIO_PORT, LED_LD3_GPIO_PIN);
+}
+
+/**
+ * @brief  Turn off the LD3 LED.
+ */
+void LedLd3Off(void)
+{
+    GpioSetLow(LED_LD3_GPIO_PORT, LED_LD3_GPIO_PIN);
 }

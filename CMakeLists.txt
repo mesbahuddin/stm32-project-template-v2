@@ -46,27 +46,27 @@ set(DEFINES
 
 # Set include paths
 set(INCLUDES
-    ${PROJECT_SOURCE_DIR}/mcal/st-stm32l4/include
-    ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/src/bsp/core
 )
 
 # Set source files
 set(SOURCES_ASM
-    ${PROJECT_SOURCE_DIR}/mcal/st-stm32l4/gcc-arm/startup_stm32l496xx.s
+    ${PROJECT_SOURCE_DIR}/src/bsp/core/startup_stm32l496xx.s
 )
 set(SOURCES_C
-    ${PROJECT_SOURCE_DIR}/mcal/st-stm32l4/source/gpio.c
-    ${PROJECT_SOURCE_DIR}/mcal/st-stm32l4/source/rcc.c
-    ${PROJECT_SOURCE_DIR}/mcal/st-stm32l4/source/systick.c
-    ${PROJECT_SOURCE_DIR}/mcal/st-stm32l4/source/uart.c
-    ${PROJECT_SOURCE_DIR}/source/button.c
-    ${PROJECT_SOURCE_DIR}/source/error_handler.c
-    ${PROJECT_SOURCE_DIR}/source/led.c
-    ${PROJECT_SOURCE_DIR}/source/log.c
-    ${PROJECT_SOURCE_DIR}/source/main.c
-    ${PROJECT_SOURCE_DIR}/source/stm32l4xx_it.c
-    ${PROJECT_SOURCE_DIR}/source/system_clock.c
-    ${PROJECT_SOURCE_DIR}/source/system_stm32l4xx.c
+    ${PROJECT_SOURCE_DIR}/src/bsp/core/gpio.c
+    ${PROJECT_SOURCE_DIR}/src/bsp/core/rcc.c
+    ${PROJECT_SOURCE_DIR}/src/bsp/core/systick.c
+    ${PROJECT_SOURCE_DIR}/src/bsp/core/uart.c
+    ${PROJECT_SOURCE_DIR}/src/bsp/core/stm32l4xx_it.c
+    ${PROJECT_SOURCE_DIR}/src/bsp/core/system_clock.c
+    ${PROJECT_SOURCE_DIR}/src/bsp/core/system_stm32l4xx.c
+    ${PROJECT_SOURCE_DIR}/src/main.c
+    ${PROJECT_SOURCE_DIR}/src/bsp/brd/led.c
+    ${PROJECT_SOURCE_DIR}/src/bsp/brd/button.c
+    ${PROJECT_SOURCE_DIR}/src/utils/log.c
+    ${PROJECT_SOURCE_DIR}/src/utils/error_handler.c
 )
 
 # Specify target executable

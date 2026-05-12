@@ -13,11 +13,11 @@
  */
 
 /* Includes ------------------------------------------------------------------*/
-#include "log.h"
+#include "utils/log.h"
 
-#include "gpio.h"
-#include "rcc.h"
-#include "uart.h"
+#include "bsp/core/gpio.h"
+#include "bsp/core/rcc.h"
+#include "bsp/core/uart.h"
 
 #include <stdarg.h>
 #include <stdio.h>

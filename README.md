@@ -33,7 +33,7 @@ was converted to a J-Link debugger
   - [Build system](#build-system)
   - [Documentation](#documentation)
   - [Format check](#format-check)
-  - [Static code analysis \& linting](#static-code-analysis--linting)
+  - [Static code analysis & linting](#static-code-analysis--linting)
   - [Style check](#style-check)
   - [Continuous integration](#continuous-integration)
   - [Development container](#development-container)
@@ -46,8 +46,7 @@ was converted to a J-Link debugger
 ### Prerequisites
 
 - [CMake](https://cmake.org/download/) is installed and available on your PATH.
-- [Cppcheck](https://cppcheck.sourceforge.io/) is installed and available on
-  your PATH.
+- [Cppcheck](https://cppcheck.sourceforge.io/) is installed and available on your PATH.
 - [Ninja](https://ninja-build.org) is installed and available on your PATH.
   Alternatively, you can use Make.
 - [GCC for ARM](https://developer.arm.com/downloads/-/gnu-rm) (GNU Arm Embedded
@@ -225,40 +224,37 @@ best development experience:
 - [Python](https://marketplace.visualstudio.com/items?itemName=ms-python.python)
 - [Remote Extension Pack](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.vscode-remote-extensionpack)
 
-## Author
-
-- [Akos Pasztor](https://akospasztor.com) — Original author
-- Mesbah Uddin — Fork/derivation
-
 ## Repository structure
 
 ```text
 stm32-project-template
 ├── .devcontainer
 ├── .github
-│   └── workflows
+│   └── workflows
 ├── .vscode
 ├── build
 ├── cmake
-│   ├── microcontrollers
-│   ├── toolchains
-│   └── tools
+│   ├── microcontrollers
+│   ├── toolchains
+│   └── tools
 ├── docs
-│   └── doxygen
-├── include
+│   └── doxygen
 ├── lib
-│   ├── CMSIS
-│   └── STM32L4xx_HAL_Driver
-├── mcal
-│   └── st-stm32l4
-│       ├── gcc-arm
-│       ├── include
-│       ├── source
-│       └── svd
+│   ├── CMSIS
+│   └── STM32L4xx_HAL_Driver
+├── lint
 ├── project
-│   └── ozone
+│   └── ozone
+├── requirements.txt
 ├── script
-└── source
+├── src
+│   ├── main.c                    — Application entry point
+│   ├── app/                      — User application modules
+│   ├── bsp/
+│   │   ├── core/                 — MCU core peripherals (GPIO, RCC, UART, SysTick, etc.)
+│   │   └── brd/                  — Board-specific components (LED, Button, etc.)
+│   └── utils/                    — Cross-cutting utilities (Log, Error Handler, etc.)
+└── temp
 ```
 
 The `.devcontainer` folder contains the devcontainer file which enables
@@ -279,22 +275,26 @@ including the toolchain and microcontroller-specific files.
 The `docs` folder contains the doxygen configuration file (Doxyfile) and other
 documentation-related static files.
 
-The application-level source code and corresponding header files are located in
-the `source` and `include` folders respectively.
+The `src/` folder contains the project source code:
+- `src/main.c` — Application entry point
+- `src/app/` — User application modules
+- `src/bsp/core/` — MCU core peripheral drivers (GPIO, RCC, UART, SysTick, interrupt handlers, etc.)
+- `src/bsp/brd/` — Board-specific component drivers (LED, Button, etc.)
+- `src/utils/` — Cross-cutting utility modules (Log, Error Handler, etc.)
 
 The `lib` folder contains all third-party code, including the CMSIS (Cortex
 Microcontroller Software Interface Standard) as well as the HAL (Hardware
 Abstraction Layer) drivers from ST.
 
-The `mcal` folder stands for Microcontroller Abstraction Library. This folder
-contains the microcontroller-specific files and drivers. These drivers are
-interfaced by the application source code and they function as tiny wrappers
-around the low-level (HAL) drivers. This allows the application to interface
-these thin wrappers instead of the manufacturer-specific low-level code, thus
-providing easy portability across different chips and microcontrollers.
+The `lint` folder contains linting configurations (MISRA-C, cppcheck suppressions).
 
 The `project` folder contains SDK- and debugger-specific files organized into
 subfolders.
 
 The `script` folder contains helper scripts related to the project and the build
 system.
+
+## Author
+
+- [Akos Pasztor](https://akospasztor.com) — Original author
+- Mesbah Uddin — Fork/derivation

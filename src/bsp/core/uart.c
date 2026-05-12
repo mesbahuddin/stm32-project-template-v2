@@ -14,9 +14,9 @@
  */
 
 /* Includes ------------------------------------------------------------------*/
-#include "uart.h"
+#include "bsp/core/uart.h"
 
-#include "error_handler.h"
+#include "utils/error_handler.h"
 
 /* Functions------------------------------------------------------------------*/
 /**

@@ -14,7 +14,7 @@
  */
 
 /* Includes ------------------------------------------------------------------*/
-#include "rcc.h"
+#include "bsp/core/rcc.h"
 
 #include "stm32l4xx_hal.h"
 

@@ -1,6 +1,6 @@
 # Set linker script
 set(LINKER_SCRIPT
-    ${PROJECT_SOURCE_DIR}/mcal/st-stm32l4/gcc-arm/stm32l496xx_flash.ld
+    ${PROJECT_SOURCE_DIR}/src/bsp/core/stm32l496xx_flash.ld
 )
 if(NOT EXISTS ${LINKER_SCRIPT})
     message(FATAL_ERROR "Linker script \"${LINKER_SCRIPT}\" does not exist!")

@@ -13,10 +13,10 @@
  */
 
 /* Includes ------------------------------------------------------------------*/
-#include "system_clock.h"
+#include "bsp/core/system_clock.h"
 
-#include "error_handler.h"
-#include "rcc.h"
+#include "utils/error_handler.h"
+#include "bsp/core/rcc.h"
 #include "stm32l4xx_hal.h"
 
 /* Functions -----------------------------------------------------------------*/

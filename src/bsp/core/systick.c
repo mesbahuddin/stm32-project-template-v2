@@ -14,7 +14,7 @@
  */
 
 /* Includes ------------------------------------------------------------------*/
-#include "systick.h"
+#include "bsp/core/systick.h"
 
 #include "stm32l4xx_hal.h"
 

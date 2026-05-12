@@ -59,8 +59,15 @@ project-root/
 │   ├── CMakeLists.txt                          # INTERFACE library for vendor code
 │   ├── CMSIS/                                  # ARM CMSIS headers
 │   └── STM32L4xx_HAL_Driver/                   # ST HAL driver source + headers
-└── script/
-    └── clang_format.py                         # Python wrapper for clang-format
+├── script/
+│   └── clang_format.py                         # Python wrapper for clang-format
+└── src/
+    ├── main.c                                  # Application entry point
+    ├── app/                                    # User application modules
+    ├── bsp/
+    │   ├── core/                               # MCU core peripherals (GPIO, RCC, UART, SysTick, etc.)
+    │   └── brd/                                # Board-specific components (LED, Button, etc.)
+    └── utils/                                  # Cross-cutting utilities (Log, Error Handler, etc.)
 ```
 
 ---
@@ -250,24 +257,37 @@ set(DEFINES
 
 ```cmake
 set(INCLUDES
-    ${PROJECT_SOURCE_DIR}/mcal/st-stm32l4/include
-    ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/src/bsp/core
 )
 
 set(SOURCES_ASM
-    ${PROJECT_SOURCE_DIR}/mcal/st-stm32l4/gcc-arm/startup_stm32l496xx.s
+    ${PROJECT_SOURCE_DIR}/src/bsp/core/startup_stm32l496xx.s
 )
 
 set(SOURCES_C
-    ${PROJECT_SOURCE_DIR}/mcal/st-stm32l4/source/gpio.c
-    ${PROJECT_SOURCE_DIR}/source/main.c
-    # ... all other .c files
+    ${PROJECT_SOURCE_DIR}/src/bsp/core/gpio.c
+    ${PROJECT_SOURCE_DIR}/src/bsp/core/rcc.c
+    ${PROJECT_SOURCE_DIR}/src/bsp/core/uart.c
+    ${PROJECT_SOURCE_DIR}/src/bsp/core/systick.c
+    ${PROJECT_SOURCE_DIR}/src/bsp/core/stm32l4xx_it.c
+    ${PROJECT_SOURCE_DIR}/src/bsp/core/system_clock.c
+    ${PROJECT_SOURCE_DIR}/src/bsp/core/system_stm32l4xx.c
+    ${PROJECT_SOURCE_DIR}/src/main.c
+    ${PROJECT_SOURCE_DIR}/src/bsp/brd/led.c
+    ${PROJECT_SOURCE_DIR}/src/bsp/brd/button.c
+    ${PROJECT_SOURCE_DIR}/src/utils/log.c
+    ${PROJECT_SOURCE_DIR}/src/utils/error_handler.c
 )
 ```
 
 - All files use absolute paths via `${PROJECT_SOURCE_DIR}`.
 - No `file(GLOB ...)` — explicit listing ensures CMake detects when files are
   added/removed.
+- `INCLUDES` has two directories:
+  - `src/` — for all project headers (e.g., `#include "bsp/core/gpio.h"`)
+  - `src/bsp/core/` — for `stm32l4xx_hal_conf.h`, which the HAL driver expects
+    to find directly (not relative to `src/`)
 
 #### Section 6: Executable Target (lines 73–94)
 
@@ -545,7 +565,7 @@ In `cmake/microcontrollers/<your-mcu>-gcc.cmake`, update:
 
 ```cmake
 # 1. Linker script path
-set(LINKER_SCRIPT ${PROJECT_SOURCE_DIR}/mcal/<your-mcu>/gcc-arm/<your-chip>_flash.ld)
+set(LINKER_SCRIPT ${PROJECT_SOURCE_DIR}/src/bsp/core/<your-chip>_flash.ld)
 
 # 2. CPU core flags
 set(MCU_FLAGS
@@ -576,8 +596,8 @@ set(DEFINES
 
 # 4. Include paths
 set(INCLUDES
-    ${PROJECT_SOURCE_DIR}/mcal/<your-mcu>/include
-    ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/src/bsp/core
 )
 
 # 5. Source files — list all your .s and .c files

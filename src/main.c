@@ -13,13 +13,13 @@
  */
 
 /* Includes ------------------------------------------------------------------*/
-#include "button.h"
-#include "error_handler.h"
-#include "led.h"
-#include "log.h"
-#include "rcc.h"
+#include "bsp/brd/button.h"
+#include "utils/error_handler.h"
+#include "bsp/brd/led.h"
+#include "utils/log.h"
+#include "bsp/core/rcc.h"
 #include "stm32l4xx_hal.h"
-#include "system_clock.h"
+#include "bsp/core/system_clock.h"
 
 /**
  * @brief  The main function.
