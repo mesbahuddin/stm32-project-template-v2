@@ -1,0 +1,173 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "shell",
+            "label": "Build project",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${command:cmake.buildDirectory}",
+                "-j",
+                "8"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "type": "shell",
+            "label": "Re-build project",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${command:cmake.buildDirectory}",
+                "--clean-first",
+                "-v",
+                "-j",
+                "8"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+        },
+        {
+            "type": "shell",
+            "label": "Clean project",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${command:cmake.buildDirectory}",
+                "--target",
+                "clean"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "type": "shell",
+            "label": "Flash via J-Link",
+            "command": "powershell",
+            "args": [
+                "-NoProfile",
+                "-Command",
+                "& \"${workspaceFolder}/scripts/flash.ps1\" -Interface JLink"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "dependsOn": "Build project",
+            "problemMatcher": []
+        },
+        {
+            "type": "shell",
+            "label": "Flash via ST-Link",
+            "command": "powershell",
+            "args": [
+                "-NoProfile",
+                "-Command",
+                "& \"${workspaceFolder}/scripts/flash.ps1\" -Interface STLink"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "dependsOn": "Build project",
+            "problemMatcher": []
+        },
+        {
+            "type": "shell",
+            "label": "Flash and Monitor",
+            "command": "powershell",
+            "args": [
+                "-NoProfile",
+                "-Command",
+                "& \"${workspaceFolder}/scripts/flash_monitor.ps1\""
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "dependsOn": "Build project",
+            "problemMatcher": []
+        },
+        {
+            "type": "shell",
+            "label": "CubeProg: Flash project (SWD)",
+            "command": "STM32_Programmer_CLI",
+            "args": [
+                "--connect",
+                "port=swd",
+                "mode=UR",
+                "--download",
+                "${command:cmake.launchTargetPath}",
+                "-hardRst",
+                "-rst",
+                "--start"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "dependsOn": "Build project",
+            "problemMatcher": []
+        },
+        {
+            "type": "shell",
+            "label": "Cppcheck",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${command:cmake.buildDirectory}",
+                "--target",
+                "cppcheck"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [],
+            "group": "test"
+        },
+        {
+            "type": "shell",
+            "label": "clang-tidy",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${command:cmake.buildDirectory}",
+                "--target",
+                "tidy"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [],
+            "group": "test"
+        },
+        {
+            "type": "shell",
+            "label": "Generate Doxygen",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${command:cmake.buildDirectory}",
+                "--target",
+                "doxygen"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [],
+            "group": "test"
+        }
+    ]
+}

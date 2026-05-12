@@ -1,12 +1,39 @@
 {
-    "cmake.cmakePath": "cube-cmake",
-    "cmake.configureArgs": [
-        "-DCMAKE_COMMAND=cube-cmake"
-    ],
-    "stm32cube-ide-clangd.path": "cube",
-    "stm32cube-ide-clangd.arguments": [
-        "starm-clangd",
-        "--query-driver=${env:CUBE_BUNDLE_PATH}/gnu-tools-for-stm32/14.3.1+st.2/bin/arm-none-eabi-gcc*",
-        "--query-driver=${env:CUBE_BUNDLE_PATH}/gnu-tools-for-stm32/14.3.1+st.2/bin/arm-none-eabi-g++*"
-    ]
+  "files.associations": {
+    "stm32l4xx_hal.h": "c",
+    "stm32l4xx_hal_conf.h": "c",
+    "stm32l496xx.h": "c"
+  },
+  "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+  "C_Cpp.intelliSenseEngine": "Default",
+  "editor.formatOnSave": true,
+  "cmake.options.statusBarVisibility": "hidden",
+  "cmake.options.advanced": {
+    "build": {
+      "statusBarVisibility": "inherit"
+    },
+    "launch": {
+      "statusBarVisibility": "inherit"
+    },
+    "debug": {
+      "statusBarVisibility": "inherit"
+    }
+  },
+  "cmake.cmakePath": "cube-cmake",
+  "cmake.configureArgs": [
+    "--preset",
+    "Debug",
+    "-DCMAKE_COMMAND=cube-cmake"
+  ],
+  "cmake.preferredGenerators": [
+    "Ninja"
+  ],
+  "cmake.buildDirectory": "${workspaceFolder}/build/Debug",
+  "cmake.launchTarget": "${workspaceFolder}/build/Debug/stm32-project-template-v2.elf",
+  "stm32cube-ide-clangd.path": "cube",
+  "stm32cube-ide-clangd.arguments": [
+    "starm-clangd",
+    "--query-driver=${env:CUBE_BUNDLE_PATH}/gnu-tools-for-stm32/14.3.1+st.2/bin/arm-none-eabi-gcc*",
+    "--query-driver=${env:CUBE_BUNDLE_PATH}/gnu-tools-for-stm32/14.3.1+st.2/bin/arm-none-eabi-g++*"
+  ]
 }

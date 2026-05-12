@@ -1,240 +1,142 @@
-# Plan: Directory Structure Reorganization
+# Plan: Import from temp/scripts/ and temp/.vscode/
+
+## Status: ✅ COMPLETE — All files have been imported and adapted.
 
 ## Context
 
-The user wants to reorganize the directory structure of the STM32 Project Template for better separation of concerns and easier future maintenance.
+The `temp/` directory contains scripts and VS Code configs from an STM32F407-based project (AGM-6). We needed to import the useful parts into this STM32L496 project, adapting them for our target.
 
-## Current Structure
+---
 
-```
-project-root/
-├── CMakeLists.txt
-├── CMakePresets.json
-├── LICENSE.md
-├── README.md
-├── CHANGELOG.md
-├── PLAN.md
-├── .clang-format
-├── .clang-tidy
-├── .clangd
-├── .devcontainer/
-├── .editorconfig
-├── .github/
-├── .settings/
-├── .vscode/
-├── .gitignore
-├── cmake/
-│   ├── microcontrollers/
-│   ├── toolchains/
-│   └── tools/
-├── docs/
-│   └── doxygen/
-├── include/          ← project-level headers (6 files)
-├── lib/              ← vendor HAL/CMSIS (unchanged)
-├── lint/
-├── mcal/             ← MCU-specific drivers (8 .c/.h + startup + linker)
-│   └── st-stm32l4/
-│       ├── gcc-arm/
-│       ├── include/
-│       ├── source/
-│       └── svd/
-├── project/
-├── requirements.txt
-├── script/
-├── source/           ← application files (12 files)
-│   ├── main.c
-│   ├── led.c
-│   ├── button.c
-│   ├── log.c
-│   ├── error_handler.c
-│   ├── system_clock.c
-│   ├── system_stm32l4xx.c
-│   └── stm32l4xx_it.c
-└── temp/
-```
+## What Was Imported
 
-## Proposed Structure
+### 1. PowerShell Build/Flash Scripts ✅
 
-### Option A: Flat Include (Recommended — fewer CMake paths, headers co-locate with sources)
+**Imported and adapted from `temp/scripts/`:**
+- ✅ `build.ps1` — Build with CMake presets, auto-detect CPU cores, color-coded output
+- ✅ `flash.ps1` — Flash firmware via J-Link (default), ST-Link, or DFU
+- ✅ `monitor.ps1` — Serial port monitor with auto-detect, color-coded output, logging
+- ✅ `clean.ps1` — Clean build artifacts
+- ✅ `config.ps1` — Build configuration (simplified for our project)
+- ✅ `flash_monitor.ps1` — Flash + monitor combo
+- ✅ `flash_gui.ps1` — Flash + monitor combo (GUI not yet available)
+- ✅ `launch_gui.ps1` — GUI launcher (placeholder — no GUI yet)
+- ✅ `launch_gui.bat` — Windows batch GUI launcher (placeholder — no GUI yet)
+- ✅ `agm.ps1` — Master menu interface
 
-```
-project-root/
-├── CMakeLists.txt
-├── CMakePresets.json
-├── LICENSE.md
-├── README.md
-├── CHANGELOG.md
-├── PLAN.md
-├── .clang-format
-├── .clang-tidy
-├── .clangd
-├── .devcontainer/
-├── .editorconfig
-├── .github/
-├── .settings/
-├── .vscode/
-├── .gitignore
-├── cmake/
-│   ├── microcontrollers/
-│   ├── toolchains/
-│   └── tools/
-├── docs/
-│   └── doxygen/
-├── lint/
-├── lib/              ← unchanged
-├── project/
-├── requirements.txt
-├── script/
-├── src/
-│   ├── main.c                    ← app entry point
-│   ├── app/                      ← user application modules
-│   │   └── (future app files)
-│   ├── bsp/
-│   │   ├── core/                 ← MCU core peripherals
-│   │   │   ├── gpio.c
-│   │   │   ├── gpio.h
-│   │   │   ├── rcc.c
-│   │   │   ├── rcc.h
-│   │   │   ├── uart.c
-│   │   │   ├── uart.h
-│   │   │   ├── systick.c
-│   │   │   ├── systick.h
-│   │   │   ├── system_clock.c
-│   │   │   ├── system_clock.h
-│   │   │   ├── stm32l4xx_it.c
-│   │   │   ├── system_stm32l4xx.c
-│   │   │   ├── startup_stm32l496xx.s
-│   │   │   └── stm32l496xx_flash.ld
-│   │   └── brd/                  ← board-specific components
-│   │       ├── led.c
-│   │       ├── led.h
-│   │       ├── button.c
-│   │       └── button.h
-│   └── utils/                    ← cross-cutting utilities
-│       ├── log.c
-│       ├── log.h
-│       ├── error_handler.c
-│       └── error_handler.h
-└── temp/
-```
+### 2. VS Code Configs ✅
 
-### Option B: Separate Include (headers in `include/` alongside `src/`)
+**Imported and adapted:**
+- ✅ `temp/.vscode/launch.json` — Cortex-Debug config: device=STM32L496xx, interface=jlink
+- ✅ `temp/.vscode/c_cpp_properties.json` — Compatible with cmake-tools
+- ✅ `temp/.vscode/settings.json` — Updated with our project settings
+- ✅ `temp/.vscode/tasks.json` — Added flash tasks (J-Link, ST-Link, CubeProg)
 
-```
-project-root/
-├── include/                  ← project-level headers (6 files)
-│   ├── button.h
-│   ├── error_handler.h
-│   ├── led.h
-│   ├── log.h
-│   ├── system_clock.h
-│   └── stm32l4xx_hal_conf.h
-├── src/
-│   ├── main.c
-│   ├── app/
-│   ├── bsp/
-│   │   ├── core/
-│   │   │   ├── gpio.c
-│   │   │   ├── rcc.c
-│   │   │   ├── uart.c
-│   │   │   ├── systick.c
-│   │   │   ├── system_clock.c
-│   │   │   ├── stm32l4xx_it.c
-│   │   │   ├── system_stm32l4xx.c
-│   │   │   ├── startup_stm32l496xx.s
-│   │   │   └── stm32l496xx_flash.ld
-│   │   └── brd/
-│   │       ├── led.c
-│   │       └── button.c
-│   └── utils/
-│       ├── log.c
-│       └── error_handler.c
-└── ...
-```
+### 3. .clang-format
 
-### Option C: Hybrid (headers co-locate with sources, but also copy to include/ for IDE convenience)
+**Kept the existing one** — LLVM style, ColumnLimit: 120. The temp version is Chromium-style with ColumnLimit: 80 and would require reformatting the entire codebase.
 
-Same as Option A, but also maintain `include/` as symlinks or copies for IDE convenience.
+### 4. .clang-tidy
 
-## File Mapping (Option A — flat include)
+**Kept the existing one** — configured for MISRA-C and our project. The temp version uses Google-style checks instead.
 
-| Current File | New File | Notes |
-|-------------|----------|-------|
-| `source/main.c` | `src/main.c` | Entry point, stays at src root |
-| `source/led.c` | `src/bsp/brd/led.c` | Board driver |
-| `source/led.h` | `src/bsp/brd/led.h` | Board driver header |
-| `source/button.c` | `src/bsp/brd/button.c` | Board driver |
-| `source/button.h` | `src/bsp/brd/button.h` | Board driver header |
-| `source/log.c` | `src/utils/log.c` | Utility module |
-| `source/log.h` | `src/utils/log.h` | Utility header |
-| `source/error_handler.c` | `src/utils/error_handler.c` | Utility module |
-| `source/error_handler.h` | `src/utils/error_handler.h` | Utility header |
-| `source/system_clock.c` | `src/bsp/core/system_clock.c` | MCU core config |
-| `source/stm32l4xx_it.c` | `src/bsp/core/stm32l4xx_it.c` | Interrupt handlers |
-| `source/system_stm32l4xx.c` | `src/bsp/core/system_stm32l4xx.c` | CMSIS SystemInit |
-| `mcal/st-stm32l4/source/gpio.c` | `src/bsp/core/gpio.c` | GPIO driver |
-| `mcal/st-stm32l4/include/gpio.h` | `src/bsp/core/gpio.h` | GPIO header |
-| `mcal/st-stm32l4/source/rcc.c` | `src/bsp/core/rcc.c` | RCC driver |
-| `mcal/st-stm32l4/include/rcc.h` | `src/bsp/core/rcc.h` | RCC header |
-| `mcal/st-stm32l4/source/uart.c` | `src/bsp/core/uart.c` | UART driver |
-| `mcal/st-stm32l4/include/uart.h` | `src/bsp/core/uart.h` | UART header |
-| `mcal/st-stm32l4/source/systick.c` | `src/bsp/core/systick.c` | SysTick driver |
-| `mcal/st-stm32l4/include/systick.h` | `src/bsp/core/systick.h` | SysTick header |
-| `mcal/st-stm32l4/gcc-arm/startup_stm32l496xx.s` | `src/bsp/core/startup_stm32l496xx.s` | Startup file |
-| `mcal/st-stm32l4/gcc-arm/stm32l496xx_flash.ld` | `src/bsp/core/stm32l496xx_flash.ld` | Linker script |
-| `include/stm32l4xx_hal_conf.h` | `src/bsp/core/stm32l4xx_hal_conf.h` | HAL config |
+---
 
-## Decisions
+## Implementation Steps ✅
 
-1. **Option A** — Flat include strategy, headers co-locate with sources, `include/` folder removed entirely.
-2. **`include/` folder** — Removed entirely (headers move with their source files).
-3. **`mcal/` folder** — Removed entirely; SVD files not required.
-4. **`project/ozone/` folder** — Keep at root (debugger-specific, not part of source tree).
-5. **`temp/` folder** — Keep at root (workspace-specific, not part of source tree).
+### Step 1: Copy PowerShell scripts ✅
+Copied all `.ps1` files from `temp/scripts/` to `src/scripts/` (new directory under `src/`).
 
-## Files That Need Changes
+### Step 2: Adapt `build.ps1` ✅
+- Changed firmware filename from `AGM_6_STM32_PORT` → `stm32-project-template-v2`
+- Removed ADC resolution mode references
+- Kept color-coded output and auto-detect CPU cores
+- Simplified build config (no ADC mode)
 
-| Category | Files |
-|----------|-------|
-| **File moves** | 22 `.c`, `.h`, `.s` files (see mapping above) |
-| **CMakeLists.txt** | Update include paths, source lists, linker script, startup file paths |
-| **CMakeLists.txt (root)** | Update `${CMAKE_PROJECT_NAME}` references, post-build targets |
-| **cmake/microcontrollers/stm32l4-gcc.cmake** | Update linker script path |
-| **cmake/tools/clang-tools.cmake** | Might need `--sysroot` update |
-| **cmake/tools/python.cmake** | No change needed |
-| **cmake/microcontrollers/common.cmake** | No change needed |
-| **.clang-tidy** | Might need `HeaderFilterRegex` update if include paths change |
-| **.vscode/c_cpp_properties.json** | Update include paths |
-| **.vscode/settings.json** | Might need update |
-| **.clangd** | Might need update |
-| **.github/workflows/ci-pipeline.yml** | No change needed (builds from CMake) |
-| **.devcontainer/devcontainer.json** | No change needed |
-| **All source files** | Update `#include` paths to match new layout |
-| **README.md** | Update repository structure diagram |
-| **CHANGELOG.md** | Add reorganization entry |
-| **docs/cmake-system.md** | Update file map and execution order |
-| **CMakePresets.json** | No change needed |
-| **LICENSE.md** | No change needed |
-| **CHANGELOG.md** | No change needed |
+### Step 3: Adapt `flash.ps1` ✅
+- Changed default interface to J-Link (JLink is now the default)
+- Changed device from `STM32F407VG` → `STM32L496xx`
+- Changed firmware filename → `stm32-project-template-v2`
+- Reordered validation set: JLink → STLink → DFU
 
-## Steps
+### Step 4: Adapt `monitor.ps1` ✅
+- Kept COM port auto-detect logic (generic)
+- Updated title from "AGM-6 STM32 CDC Monitor" → "STM32 Serial Monitor"
 
-- [ ] Choose include strategy (Option A / B / C)
-- [ ] Move files to new structure
-- [ ] Update all `#include` paths in source files
-- [ ] Update `CMakeLists.txt` (root) — include dirs, source lists, linker script, startup file
-- [ ] Update `cmake/microcontrollers/stm32l4-gcc.cmake` — linker script path
-- [ ] Update `cmake/tools/clang-tools.cmake` — if sysroot path changed
-- [ ] Update `.vscode/c_cpp_properties.json` — include paths
-- [ ] Update `.vscode/settings.json` — if needed
-- [ ] Update `.clangd` — if needed
-- [ ] Update `.clang-tidy` — if HeaderFilterRegex needed
-- [ ] Update `README.md` — repository structure diagram
-- [ ] Update `docs/cmake-system.md` — file map and execution order
-- [ ] Update `CHANGELOG.md` — reorganization entry
-- [ ] Decide on `mcal/svd/` — move or delete?
-- [ ] Decide on `project/ozone/` — move or delete?
-- [ ] Decide on `temp/` — delete or ignore?
-- [ ] Test build: `cmake --preset Debug && cmake --build --preset Debug`
-- [ ] Test linting: `cmake --build --preset Debug --target tidy && cmake --build --preset Debug --target cppcheck`
-- [ ] Commit changes
+### Step 5: Adapt `clean.ps1` ✅
+- Updated title and references
+- Updated build directory paths to match our CMake preset structure
+
+### Step 6: Adapt `config.ps1` ✅
+- Removed ADC mode selection entirely
+- Simplified to just BuildType (Debug/Release) and optional Defines
+
+### Step 7: Adapt VS Code configs ✅
+- **launch.json**: device=STM32L496xx, interface=jlink, added SVD file, added J-Link server path comment
+- **tasks.json**: Added J-Link flash task, ST-Link flash task, Flash+Monitor task, Cppcheck, clang-tidy, Doxygen tasks
+- **settings.json**: Updated with our project settings (cmake path, build directory, launch target)
+- **c_cpp_properties.json**: Kept as-is (compatible with cmake-tools)
+
+### Step 8: Kept existing configs ✅
+- `.clang-format` kept as-is (LLVM style)
+- `.clang-tidy` kept as-is (MISRA-C rules)
+
+### Step 9: Adapt `flash_monitor.ps1` ✅
+- Changed default flash method to J-Link
+- Updated titles and comments
+
+### Step 10: Adapt `flash_gui.ps1` ✅
+- Since no GUI exists, converted to flash + monitor combo
+- Removed GUI verification and launch code
+- Replaced with serial monitor launch
+
+### Step 11: Adapt `launch_gui.ps1` and `launch_gui.bat` ✅
+- Converted to placeholder scripts that note GUI is not yet available
+- Kept structure for future GUI implementation
+
+### Step 12: Updated `agm.ps1` (master menu) ✅
+- Updated titles and menu items
+- Removed ADC mode selection
+- Updated flash interface options
+
+### Step 13: Updated README.md ✅
+- Rewrote for our project's scripts and conventions
+- Updated all documentation to match the adapted scripts
+
+---
+
+## Files Imported and Adapted ✅
+
+| Source | Destination | Status |
+|--------|-------------|--------|
+| `temp/scripts/agm.ps1` | `src/scripts/agm.ps1` | ✅ Adapted |
+| `temp/scripts/build.ps1` | `src/scripts/build.ps1` | ✅ Adapted |
+| `temp/scripts/build_config.ps1` | `src/scripts/build_config.ps1` | ✅ Adapted |
+| `temp/scripts/clean.ps1` | `src/scripts/clean.ps1` | ✅ Adapted |
+| `temp/scripts/config.ps1` | `src/scripts/config.ps1` | ✅ Adapted |
+| `temp/scripts/flash.ps1` | `src/scripts/flash.ps1` | ✅ Adapted |
+| `temp/scripts/flash_gui.ps1` | `src/scripts/flash_gui.ps1` | ✅ Adapted |
+| `temp/scripts/flash_monitor.ps1` | `src/scripts/flash_monitor.ps1` | ✅ Adapted |
+| `temp/scripts/launch_gui.ps1` | `src/scripts/launch_gui.ps1` | ✅ Adapted (placeholder) |
+| `temp/scripts/launch_gui.bat` | `src/scripts/launch_gui.bat` | ✅ Adapted (placeholder) |
+| `temp/scripts/monitor.ps1` | `src/scripts/monitor.ps1` | ✅ Adapted |
+| `temp/scripts/README.md` | `src/scripts/README.md` | ✅ Rewritten |
+| `temp/.vscode/launch.json` | `.vscode/launch.json` | ✅ Adapted |
+| `temp/.vscode/tasks.json` | `.vscode/tasks.json` | ✅ Adapted |
+| `temp/.vscode/settings.json` | `.vscode/settings.json` | ✅ Adapted |
+| `temp/.vscode/c_cpp_properties.json` | `.vscode/c_cpp_properties.json` | ✅ Copied (compatible) |
+| `temp/.clang-format` | `.clang-format` | Kept existing (LLVM style) |
+| `temp/.clang-tidy` | `.clang-tidy` | Kept existing (MISRA-C) |
+
+## Key Adaptations Summary ✅
+
+1. ✅ **Firmware filename**: `AGM_6_STM32_PORT` → `stm32-project-template-v2`
+2. ✅ **MCU target**: `STM32F407VG` → `STM32L496xx`
+3. ✅ **Debug interface**: J-Link is now the default (was ST-Link)
+4. ✅ **ADC mode selection**: Removed (not applicable to our project)
+5. ✅ **J-Link paths**: Updated in flash scripts
+6. ✅ **J-Link GDB server**: Added J-Link GDB server config to launch.json
+7. ✅ **CMake preset paths**: Match our build directory structure (`build/Debug/`, `build/Release/`)
+8. ✅ **Flash + Monitor combo**: Combined flash_monitor.ps1 for quick workflow
+9. ✅ **GUI scripts**: Converted to placeholders (no GUI yet)
+10. ✅ **Config script**: Simplified (BuildType only, no ADC mode)

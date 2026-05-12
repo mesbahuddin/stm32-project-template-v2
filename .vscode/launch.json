@@ -1,0 +1,44 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Microcontroller - J-Link",
+            "cwd": "${workspaceFolder}",
+            "type": "cortex-debug",
+            "executable": "${command:cmake.launchTargetPath}", //or fixed file path: build/stm32l496-disco.elf
+            "request": "launch",                //Use "attach" to connect to target w/o elf download
+            "servertype": "jlink",
+            "device": "STM32L496xx",                       //MCU used
+            "interface": "swd",
+            "serialNumber": "",                 //Set J-Link ID if you use multiple at the same time
+            "runToEntryPoint": "main",
+            "svdFile": "${workspaceFolder}/lib/CMSIS/STM32L4xx/SVD/STM32L496.svd",
+            "v1": false,
+            "showDevDebugOutput": "both",
+
+            /* J-Link GDB server path - adjust if installed elsewhere */
+            //"serverpath": "C:\\Program Files\\SEGGER\\JLink\\JLinkGDBServerCL.exe",
+
+            /* If you use external loader, add additional arguments */
+            //"serverArgs": ["--endian", "little"],
+        },
+        {
+            "name": "Debug Microcontroller - ST-Link",
+            "cwd": "${workspaceFolder}",
+            "type": "cortex-debug",
+            "executable": "${command:cmake.launchTargetPath}",
+            "request": "launch",
+            "servertype": "stlink",
+            "device": "STM32L496xx",
+            "interface": "swd",
+            "serialNumber": "",
+            "runToEntryPoint": "main",
+            "svdFile": "${workspaceFolder}/lib/CMSIS/STM32L4xx/SVD/STM32L496.svd",
+            "v1": false,
+            "showDevDebugOutput": "both"
+        }
+    ]
+}

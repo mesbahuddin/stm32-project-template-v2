@@ -59,7 +59,7 @@ project-root/
 │   ├── CMakeLists.txt                          # INTERFACE library for vendor code
 │   ├── CMSIS/                                  # ARM CMSIS headers
 │   └── STM32L4xx_HAL_Driver/                   # ST HAL driver source + headers
-├── script/
+├── scripts/
 │   └── clang_format.py                         # Python wrapper for clang-format
 └── src/
     ├── main.c                                  # Application entry point
@@ -333,7 +333,7 @@ resolves to the output `.elf` path.
 
 #### Section 8: Custom Quality Targets (lines 113–188)
 
-**check-format / run-format**: Run `script/clang_format.py` via Python.
+**check-format / run-format**: Run `scripts/clang_format.py` via Python.
 The `--check` flag makes it report-only (non-zero exit on errors).
 
 **tidy**: Runs clang-tidy. Requires transforming the defines and includes
@@ -550,7 +550,7 @@ new-project/
 │   ├── CMakeLists.txt              ← copy and modify for your vendor libs
 │   ├── CMSIS/                      ← your chip's CMSIS
 │   └── <Vendor>_HAL_Driver/        ← your chip's HAL
-├── script/
+├── scripts/
 │   └── clang_format.py             ← copy as-is
 ├── .clang-format                   ← copy as-is (or customize)
 ├── .clang-tidy                     ← copy as-is (or customize)

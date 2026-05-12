@@ -4,7 +4,7 @@ project(stm32-project-template-v2)
 enable_language(C CXX ASM)
 
 # Set the following variable to `ON` to print all cmake variables
-set(CMAKE_DUMP_VARIABLES            OFF)
+set(CMAKE_DUMP_VARIABLES            OFF) 
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS   ON)
 
@@ -112,7 +112,7 @@ add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
 
 # Add custom target to check source code formatting with clang-format
 add_custom_target(check-format
-    COMMAND ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/script/clang_format.py
+    COMMAND ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/scripts/clang_format.py
             --check
             --style=file
             --executable=${CLANG_FORMAT}
@@ -122,7 +122,7 @@ add_custom_target(check-format
 
 # Add custom target to run clang-format
 add_custom_target(run-format
-    COMMAND ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/script/clang_format.py
+    COMMAND ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/scripts/clang_format.py
             --style=file
             --executable=${CLANG_FORMAT}
             ${INCLUDES} ${SOURCES_C}
