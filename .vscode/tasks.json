@@ -63,8 +63,24 @@
             "args": [
                 "-NoProfile",
                 "-Command",
-                "& \"${workspaceFolder}/scripts/flash.ps1\" -Interface JLink"
+                "& \"${workspaceFolder}/scripts/powershell/flash.ps1\" -Interface JLink"
             ],
+            "osx": {
+                "command": "bash",
+                "args": [
+                    "scripts/bash/flash.sh",
+                    "-i",
+                    "JLink"
+                ]
+            },
+            "linux": {
+                "command": "bash",
+                "args": [
+                    "scripts/bash/flash.sh",
+                    "-i",
+                    "JLink"
+                ]
+            },
             "options": {
                 "cwd": "${workspaceFolder}"
             },
@@ -78,8 +94,24 @@
             "args": [
                 "-NoProfile",
                 "-Command",
-                "& \"${workspaceFolder}/scripts/flash.ps1\" -Interface STLink"
+                "& \"${workspaceFolder}/scripts/powershell/flash.ps1\" -Interface STLink"
             ],
+            "osx": {
+                "command": "bash",
+                "args": [
+                    "scripts/bash/flash.sh",
+                    "-i",
+                    "STLink"
+                ]
+            },
+            "linux": {
+                "command": "bash",
+                "args": [
+                    "scripts/bash/flash.sh",
+                    "-i",
+                    "STLink"
+                ]
+            },
             "options": {
                 "cwd": "${workspaceFolder}"
             },
@@ -93,12 +125,54 @@
             "args": [
                 "-NoProfile",
                 "-Command",
-                "& \"${workspaceFolder}/scripts/flash_monitor.ps1\""
+                "& \"${workspaceFolder}/scripts/powershell/flash_monitor.ps1\""
             ],
+            "osx": {
+                "command": "bash",
+                "args": [
+                    "scripts/bash/stm32-dev.sh",
+                    "flash-monitor"
+                ]
+            },
+            "linux": {
+                "command": "bash",
+                "args": [
+                    "scripts/bash/stm32-dev.sh",
+                    "flash-monitor"
+                ]
+            },
             "options": {
                 "cwd": "${workspaceFolder}"
             },
             "dependsOn": "Build project",
+            "problemMatcher": []
+        },
+        {
+            "type": "shell",
+            "label": "Serial Monitor",
+            "command": "powershell",
+            "args": [
+                "-NoProfile",
+                "-Command",
+                "& \"${workspaceFolder}/scripts/powershell/monitor.ps1\""
+            ],
+            "osx": {
+                "command": "bash",
+                "args": [
+                    "scripts/bash/stm32-dev.sh",
+                    "monitor"
+                ]
+            },
+            "linux": {
+                "command": "bash",
+                "args": [
+                    "scripts/bash/stm32-dev.sh",
+                    "monitor"
+                ]
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
             "problemMatcher": []
         },
         {
