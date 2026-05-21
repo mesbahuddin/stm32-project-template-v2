@@ -36,7 +36,8 @@ The build system is structured around these design principles:
 4. **Integrated code quality** — clang-format, clang-tidy, cppcheck (MISRA C),
    and Doxygen are custom build targets available from the same build system.
 5. **Vendor code isolation** — third-party libraries (CMSIS, HAL) are wrapped in
-   an `INTERFACE` library to keep them separate from project code.
+   a `STATIC` library to keep them separate from project code. Vendor warnings
+   are suppressed with `-w` to avoid `-Werror` issues across build types.
 
 ---
 
@@ -56,7 +57,7 @@ project-root/
 │       ├── clang-tools.cmake                   # clang-format & clang-tidy setup
 │       └── python.cmake                        # Python interpreter discovery
 ├── lib/
-│   ├── CMakeLists.txt                          # INTERFACE library for vendor code
+│   ├── CMakeLists.txt                          # STATIC library for vendor code
 │   ├── CMSIS/                                  # ARM CMSIS headers
 │   └── STM32L4xx_HAL_Driver/                   # ST HAL driver source + headers
 ├── scripts/
@@ -81,6 +82,7 @@ When you run `cmake --preset Debug`, CMake processes files in this order:
    └─ Selects toolchain file, generator (Ninja), build directory, build type
 
 2. cmake/toolchains/gcc-arm-none-eabi.cmake       [loaded by CMake BEFORE project()]
+   └─ Auto-discovers ARM GCC: ARM_GCC_PATH var → env var → system PATH
    └─ Defines cross-compiler, objcopy, size tool, executable suffix
    └─ Extracts TOOLCHAIN_SYSROOT from the compiler
 
@@ -90,7 +92,7 @@ When you run `cmake --preset Debug`, CMake processes files in this order:
    ├─ include(cmake/microcontrollers/common.cmake) → sets -Og/-O3/-Os/-O2 per build type
    ├─ include(cmake/microcontrollers/stm32l4-gcc.cmake) → sets MCU flags, linker script
    ├─ add_subdirectory(lib)                        → processes lib/CMakeLists.txt
-   │   └─ lib/CMakeLists.txt                       → creates INTERFACE library
+   │   └─ lib/CMakeLists.txt                       → creates STATIC library
    ├─ Defines sources, includes, defines
    ├─ Creates executable target
    ├─ Adds post-build commands (size, .bin, .hex)
@@ -161,12 +163,18 @@ remember compiler flags.
 
 **Purpose**: Tells CMake how to cross-compile for ARM bare-metal targets.
 
+**Toolchain discovery** (priority order):
+
+1. **CMake variable** — `cmake -DARM_GCC_PATH=/path/to/bin ..`
+2. **Environment variable** — `export ARM_GCC_PATH=/path/to/bin`
+3. **System PATH** — `arm-none-eabi-gcc` must be on PATH
+
 **What it does**:
 
 1. Sets `CMAKE_SYSTEM_NAME` to `Generic` (bare-metal, no OS).
 2. Sets `CMAKE_SYSTEM_PROCESSOR` to `arm`.
 3. Finds cross-compiler tools (`arm-none-eabi-gcc`, `arm-none-eabi-objcopy`,
-   etc.) on PATH or at a hardcoded fallback path.
+   etc.) via `ARM_GCC_PATH` or system PATH.
 4. Sets executable suffix to `.elf`.
 5. Sets `CMAKE_TRY_COMPILE_TARGET_TYPE` to `STATIC_LIBRARY` to prevent
    CMake's compiler test from failing (no OS = can't run executables).
@@ -177,7 +185,7 @@ remember compiler flags.
 
 | Variable | What to change |
 |----------|---------------|
-| `CROSS_COMPILER_BIN_PATH` | Path to your GCC ARM installation (if not on PATH) |
+| `ARM_GCC_PATH` | Path to your GCC ARM `bin/` directory (or use PATH) |
 | `CROSS_COMPILER_PREFIX` | Keep `arm-none-eabi` for Cortex-M targets |
 
 **Key variables it exports**:
@@ -262,7 +270,7 @@ set(INCLUDES
 )
 
 set(SOURCES_ASM
-    ${PROJECT_SOURCE_DIR}/src/bsp/core/startup_stm32l496xx.s
+    ${PROJECT_SOURCE_DIR}/src/bsp/startup/startup_stm32l496xx.s
 )
 
 set(SOURCES_C
@@ -481,32 +489,47 @@ The resulting `Python_EXECUTABLE` variable is used by the `check-format` and
 
 ### lib/CMakeLists.txt
 
-**Purpose**: Wraps third-party vendor code (CMSIS + HAL) as an INTERFACE
-library.
+**Purpose**: Wraps third-party vendor code (CMSIS + HAL) as a STATIC
+library with warning suppression.
 
 **What it does**:
 
 ```cmake
-add_library(lib INTERFACE)
+add_library(lib STATIC)
 
-target_include_directories(lib INTERFACE
+# Suppress all warnings for vendor code
+# (prevents -Werror issues with -O3 / Release builds)
+target_compile_options(lib PRIVATE "-w")
+
+# Required defines for HAL to compile
+target_compile_definitions(lib PRIVATE
+    STM32L496xx          # Your chip's register definitions
+    USE_HAL_DRIVER       # Enable HAL module includes
+)
+
+target_include_directories(lib PUBLIC
     CMSIS/Device/ST/STM32L4xx/Include
     CMSIS/Include
     STM32L4xx_HAL_Driver/Inc
     STM32L4xx_HAL_Driver/Inc/Legacy
+    ${CMAKE_SOURCE_DIR}/src/bsp/core  # For stm32xxxx_hal_conf.h
 )
 
-target_sources(lib INTERFACE
+target_sources(lib PRIVATE
     STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_gpio.c
     STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_rcc.c
     # ... all HAL source files needed
 )
 ```
 
-**Why INTERFACE**: An INTERFACE library has no compiled output of its own.
-Its sources, includes, and defines are injected into any target that links
-against it. This means the HAL `.c` files are compiled as part of the main
-executable, using the same compiler flags.
+**Why STATIC instead of INTERFACE**: Vendor HAL code often triggers warnings
+under `-O3` (Release) that are promoted to errors by `-Werror`. Using
+`STATIC` with `-w` suppresses all vendor warnings cleanly, while keeping
+project code under strict warning policy.
+
+**Critical**: The lib must have the same defines (`STM32xxxxxx`,
+`USE_HAL_DRIVER`) and include path to `src/bsp/core/` (for `stm32xxxx_hal_conf.h`)
+as the main target — otherwise HAL source files won't compile.
 
 **Clang-tidy system includes export**: The file also exports HAL/CMSIS
 include paths to the parent scope for clang-tidy to use with `-isystem`,
@@ -524,6 +547,7 @@ set(CLANG_TIDY_SYSTEM_INCLUDES
 
 | Variable | What to change |
 |----------|---------------|
+| `target_compile_definitions` | Update `STM32xxxxxx` to your chip |
 | Include paths | Update for your chip family's CMSIS/HAL structure |
 | Source list | Include only the HAL modules your project uses |
 
@@ -565,7 +589,7 @@ In `cmake/microcontrollers/<your-mcu>-gcc.cmake`, update:
 
 ```cmake
 # 1. Linker script path
-set(LINKER_SCRIPT ${PROJECT_SOURCE_DIR}/src/bsp/core/<your-chip>_flash.ld)
+set(LINKER_SCRIPT ${PROJECT_SOURCE_DIR}/<your-chip>_flash.ld)
 
 # 2. CPU core flags
 set(MCU_FLAGS
@@ -608,7 +632,21 @@ set(SOURCES_C ...)
 ### Step 4: Update lib/CMakeLists.txt
 
 List the CMSIS and HAL include paths and source files for your chip family.
-Only include the HAL modules you actually use.
+Only include the HAL modules you actually use. Make sure to:
+
+```cmake
+# 1. Set the correct chip define (must match DEFINES in root CMakeLists.txt)
+target_compile_definitions(lib PRIVATE
+    YOUR_CHIP_DEFINE        # e.g., STM32H750xx, STM32F407xx
+    USE_HAL_DRIVER
+)
+
+# 2. Add src/bsp/core to includes (for stm32xxxx_hal_conf.h)
+target_include_directories(lib PUBLIC
+    ...
+    ${CMAKE_SOURCE_DIR}/src/bsp/core
+)
+```
 
 ### Step 5: Verify
 

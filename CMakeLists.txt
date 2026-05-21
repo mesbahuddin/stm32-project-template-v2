@@ -52,7 +52,7 @@ set(INCLUDES
 
 # Set source files
 set(SOURCES_ASM
-    ${PROJECT_SOURCE_DIR}/src/bsp/core/startup_stm32l496xx.s
+    ${PROJECT_SOURCE_DIR}/src/bsp/startup/startup_stm32l496xx.s
 )
 set(SOURCES_C
     ${PROJECT_SOURCE_DIR}/src/bsp/core/gpio.c
@@ -92,6 +92,21 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
     lib
 )
+
+# CRITICAL: LTO + STATIC library linking handling
+# For MinSizeRel and Release with LTO, we need --whole-archive to prevent
+# LTO from removing needed symbols from the STATIC library
+if(CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
+    message(STATUS "MinSizeRel: Using whole-archive for LTO compatibility")
+    target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
+        "-Wl,--whole-archive" lib "-Wl,--no-whole-archive"
+    )
+elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+    # Release: Use whole-archive for performance optimization with LTO
+    target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
+        "-Wl,--whole-archive" lib "-Wl,--no-whole-archive"
+    )
+endif()
 
 # Generate size information
 add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD

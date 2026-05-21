@@ -29,7 +29,7 @@ param(
 )
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$projectDir = Split-Path -Parent $scriptDir
+$projectDir = Split-Path -Parent (Split-Path -Parent $scriptDir)
 $configFile = Join-Path $scriptDir "build_config.ps1"
 
 Write-Host "======================================" -ForegroundColor Cyan

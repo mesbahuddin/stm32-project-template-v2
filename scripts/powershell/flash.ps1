@@ -40,13 +40,15 @@ param(
     
     [string]$File = "",
     
+    [string]$Device = "",
+    
     [switch]$Verify,
     
     [switch]$Reset = $true
 )
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$projectDir = Split-Path -Parent $scriptDir
+$projectDir = Split-Path -Parent (Split-Path -Parent $scriptDir)
 
 Write-Host "======================================" -ForegroundColor Cyan
 Write-Host "  STM32 Flash Programming" -ForegroundColor Cyan
@@ -66,20 +68,37 @@ if (Test-Path $configFile) {
 }
 
 # Auto-detect firmware file if not specified
+$searchedPaths = @()
 if (-not $File) {
-    $searchPaths = @(
-        (Join-Path $projectDir "build" $buildType "stm32-project-template-v2.hex"),
-        (Join-Path $projectDir "build" $buildType "stm32-project-template-v2.bin"),
-        (Join-Path $projectDir "build\Debug\stm32-project-template-v2.hex"),
-        (Join-Path $projectDir "build\Release\stm32-project-template-v2.hex"),
-        (Join-Path $projectDir "Debug\stm32-project-template-v2.hex"),
-        (Join-Path $projectDir "stm32-project-template-v2.hex")
-    )
+    $buildTypeDir = Join-Path (Join-Path $projectDir "build") $buildType
+    if (Test-Path $buildTypeDir) {
+        $elf = Get-ChildItem -Path $buildTypeDir -Filter "*.elf" -File | Select-Object -First 1
+        $hex = Get-ChildItem -Path $buildTypeDir -Filter "*.hex" -File | Select-Object -First 1
+        $bin = Get-ChildItem -Path $buildTypeDir -Filter "*.bin" -File | Select-Object -First 1
+        
+        # Priority: hex, then bin, then elf
+        if ($hex) { $File = $hex.FullName }
+        elseif ($bin) { $File = $bin.FullName }
+        elseif ($elf) { $File = $elf.FullName }
+    }
     
-    foreach ($path in $searchPaths) {
-        if (Test-Path $path) {
-            $File = $path
-            break
+    # Fallback to search paths if not found dynamically
+    if (-not $File) {
+        $projectName = Split-Path $projectDir -Leaf
+        $searchedPaths = @(
+            "$projectDir\build\$buildType\$projectName.hex",
+            "$projectDir\build\$buildType\$projectName.bin",
+            "$projectDir\build\$buildType\stm32-project-template-v2.hex",
+            "$projectDir\build\$buildType\stm32-project-template-v2.bin",
+            "$projectDir\build\Debug\stm32-project-template-v2.hex",
+            "$projectDir\build\Release\stm32-project-template-v2.hex"
+        )
+        
+        foreach ($path in $searchedPaths) {
+            if (Test-Path $path) {
+                $File = $path
+                break
+            }
         }
     }
 }
@@ -88,15 +107,43 @@ if (-not $File) {
 if (-not $File -or -not (Test-Path $File)) {
     Write-Host "ERROR: Firmware file not found!" -ForegroundColor Red
     Write-Host ""
-    Write-Host "Searched paths:" -ForegroundColor Yellow
-    foreach ($path in $searchPaths) {
-        Write-Host "  $path" -ForegroundColor Gray
+    if ($searchedPaths.Count -gt 0) {
+        Write-Host "Searched paths:" -ForegroundColor Yellow
+        foreach ($path in $searchedPaths) {
+            Write-Host "  $path" -ForegroundColor Gray
+        }
+    } else {
+        Write-Host "Build type directory '$buildTypeDir' searched but no binary (.hex, .bin, .elf) found." -ForegroundColor Yellow
     }
     Write-Host ""
     Write-Host "Please build first or specify file:" -ForegroundColor Yellow
     Write-Host "  .\build.ps1" -ForegroundColor White
     Write-Host "  .\flash.ps1 -File C:\path\to\firmware.hex" -ForegroundColor White
     exit 1
+}
+
+# Auto-detect MCU device from .ioc if not specified
+if (-not $Device) {
+    $iocFile = Get-ChildItem -Path $projectDir -Filter "*.ioc" -File | Select-Object -First 1
+    if ($iocFile) {
+        $iocContent = Get-Content $iocFile.FullName
+        foreach ($line in $iocContent) {
+            if ($line -match "Mcu\.CPN\s*=\s*([a-zA-Z0-9]+)") {
+                $rawCpn = $Matches[1]
+                # Segger J-Link generic compatibility, e.g. STM32F407VGT6 -> STM32F407xx
+                if ($rawCpn -match "^(STM32[a-zA-Z0-9]{5})") {
+                    $Device = $Matches[1] + "xx"
+                } else {
+                    $Device = $rawCpn
+                }
+                break
+            }
+        }
+    }
+}
+if (-not $Device) {
+    # Fallback to template default
+    $Device = "STM32L496xx"
 }
 
 Write-Host "Firmware file: $File" -ForegroundColor Green
@@ -111,6 +158,38 @@ function Test-Command {
     return $?
 }
 
+# Locate STM32CubeProgrammer CLI robustly on Windows
+function Find-CubeProgrammer {
+    # 1. Check if it's already in the PATH
+    $cmd = Get-Command "STM32_Programmer_CLI.exe" -ErrorAction SilentlyContinue
+    if ($cmd) {
+        return $cmd.Source
+    }
+    
+    # 2. Check in C:\ST for versioned STM32CubeCLT paths (e.g. C:\ST\STM32CubeCLT_1.21.0\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe)
+    if (Test-Path "C:\ST") {
+        $cltPath = Get-ChildItem -Path "C:\ST" -Filter "STM32_Programmer_CLI.exe" -Recurse -File -ErrorAction SilentlyContinue | 
+            Sort-Object FullName -Descending | Select-Object -First 1
+        if ($cltPath) {
+            return $cltPath.FullName
+        }
+    }
+    
+    # 3. Check default installation directory in Program Files
+    $defaultProgFiles = "C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe"
+    if (Test-Path $defaultProgFiles) {
+        return $defaultProgFiles
+    }
+    
+    # 4. Check Program Files (x86)
+    $defaultProgFilesX86 = "C:\Program Files (x86)\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe"
+    if (Test-Path $defaultProgFilesX86) {
+        return $defaultProgFilesX86
+    }
+    
+    return $null
+}
+
 # Flash based on interface
 switch ($Interface) {
     "JLink" {
@@ -118,7 +197,7 @@ switch ($Interface) {
         Write-Host ""
         
         if (Test-Command "JLink.exe") {
-            $device = "STM32L496xx"
+            $device = $Device
             $speed = "4000"
             
             $jlinkScript = @"
@@ -168,15 +247,15 @@ qc
         Write-Host ""
         
         # Try STM32CubeProgrammer first (CLI)
-        $cubeProgrammer = Get-ChildItem -Path "C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin" -Filter "STM32_Programmer_CLI.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+        $cubeProgrammerPath = Find-CubeProgrammer
         
-        if ($cubeProgrammer) {
-            Write-Host "Using STM32CubeProgrammer..." -ForegroundColor Green
+        if ($cubeProgrammerPath) {
+            Write-Host "Using STM32CubeProgrammer at: $cubeProgrammerPath" -ForegroundColor Green
             $args = @("-c", "port=SWD", "-w", $File, "-v")
             if ($Reset) { $args += "-rst" }
             
             Write-Host "  Command: STM32_Programmer_CLI $([string]::Join(' ', $args))" -ForegroundColor Gray
-            $result = Start-Process -FilePath $cubeProgrammer.FullName -ArgumentList $args -Wait -PassThru -NoNewWindow
+            $result = Start-Process -FilePath $cubeProgrammerPath -ArgumentList $args -Wait -PassThru -NoNewWindow
             
             if ($result.ExitCode -ne 0) {
                 Write-Host ""
@@ -228,15 +307,15 @@ qc
         
         # Check for DfuSe or STM32CubeProgrammer
         $dfuPath = "C:\Program Files (x86)\STMicroelectronics\Software\Flash Loader Demo\DfuSeCommand.exe"
-        $cubeProgrammer = Get-ChildItem -Path "C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin" -Filter "STM32_Programmer_CLI.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+        $cubeProgrammerPath = Find-CubeProgrammer
         
-        if ($cubeProgrammer) {
-            Write-Host "Using STM32CubeProgrammer (DFU)..." -ForegroundColor Green
+        if ($cubeProgrammerPath) {
+            Write-Host "Using STM32CubeProgrammer (DFU) at: $cubeProgrammerPath" -ForegroundColor Green
             $args = @("-c", "port=USB1", "-w", $File, "-v")
             if ($Reset) { $args += "-rst" }
             
             Write-Host "  Command: STM32_Programmer_CLI $([string]::Join(' ', $args))" -ForegroundColor Gray
-            $result = Start-Process -FilePath $cubeProgrammer.FullName -ArgumentList $args -Wait -PassThru -NoNewWindow
+            $result = Start-Process -FilePath $cubeProgrammerPath -ArgumentList $args -Wait -PassThru -NoNewWindow
             
             if ($result.ExitCode -ne 0) {
                 Write-Host ""

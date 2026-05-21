@@ -23,7 +23,7 @@ param(
 )
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$projectDir = Split-Path -Parent $scriptDir
+$projectDir = Split-Path -Parent (Split-Path -Parent $scriptDir)
 
 Write-Host "======================================" -ForegroundColor Cyan
 Write-Host "  STM32 Clean" -ForegroundColor Cyan

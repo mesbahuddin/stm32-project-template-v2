@@ -56,7 +56,7 @@ $Gray = "DarkGray"
 
 # Get script directory
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ProjectRoot = Split-Path -Parent $ScriptDir
+$ProjectRoot = Split-Path -Parent (Split-Path -Parent $ScriptDir)
 
 Write-Host "========================================" -ForegroundColor $Cyan
 Write-Host "  STM32 Flash + Monitor" -ForegroundColor $Cyan
@@ -68,7 +68,10 @@ Write-Host "Step 1: Flashing firmware..." -ForegroundColor $Yellow
 Write-Host "----------------------------------------" -ForegroundColor $Gray
 
 try {
-    $FlashArgs = @{ Method = $FlashMethod }
+    $interface = "JLink"
+    if ($FlashMethod -eq "stlink") { $interface = "STLink" }
+    elseif ($FlashMethod -eq "dfu") { $interface = "DFU" }
+    $FlashArgs = @{ Interface = $interface }
     & "$ScriptDir\flash.ps1" @FlashArgs
     
     if ($LASTEXITCODE -ne 0) {

@@ -28,7 +28,7 @@ param(
 )
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$projectDir = Split-Path -Parent $scriptDir
+$projectDir = Split-Path -Parent (Split-Path -Parent $scriptDir)
 $configFile = Join-Path $scriptDir "build_config.ps1"
 
 # Check if configuration exists
@@ -63,7 +63,7 @@ if ($Jobs -eq 0) {
 # Clean if requested
 if ($Clean) {
     Write-Host "Cleaning build directory..." -ForegroundColor Yellow
-    $buildDir = Join-Path $projectDir "build" $BUILD_TYPE
+    $buildDir = Join-Path (Join-Path $projectDir "build") $BUILD_TYPE
     if (Test-Path $buildDir) {
         Remove-Item -Recurse -Force $buildDir
         Write-Host "Build directory cleaned: $buildDir" -ForegroundColor Green
@@ -196,9 +196,17 @@ if ($buildExitCode -ne 0) {
 }
 
 # Check for output file
-$elfFile = Join-Path $projectDir (Join-Path "build" (Join-Path $BUILD_TYPE "stm32-project-template-v2.elf"))
-$hexFile = Join-Path $projectDir (Join-Path "build" (Join-Path $BUILD_TYPE "stm32-project-template-v2.hex"))
-$binFile = Join-Path $projectDir (Join-Path "build" (Join-Path $BUILD_TYPE "stm32-project-template-v2.bin"))
+$buildTypeDir = Join-Path (Join-Path $projectDir "build") $BUILD_TYPE
+$elfFile = Get-ChildItem -Path $buildTypeDir -Filter "*.elf" -File | Select-Object -First 1 | ForEach-Object { $_.FullName }
+$hexFile = Get-ChildItem -Path $buildTypeDir -Filter "*.hex" -File | Select-Object -First 1 | ForEach-Object { $_.FullName }
+$binFile = Get-ChildItem -Path $buildTypeDir -Filter "*.bin" -File | Select-Object -First 1 | ForEach-Object { $_.FullName }
+
+if (-not $elfFile) {
+    $projectName = Split-Path $projectDir -Leaf
+    $elfFile = Join-Path $buildTypeDir "$projectName.elf"
+    $hexFile = Join-Path $buildTypeDir "$projectName.hex"
+    $binFile = Join-Path $buildTypeDir "$projectName.bin"
+}
 
 Write-Host ""
 Write-Host "======================================" -ForegroundColor Green
@@ -208,7 +216,6 @@ Write-Host ""
 
 # Parse Flash/RAM usage from arm-none-eabi-size output
 # Format: text    data     bss     dec     hex    filename
-# STM32L496: 2048 KB Flash, 320 KB RAM
 $flashTotal = 0
 $ramTotal = 0
 $flashKB = 0
@@ -218,9 +225,27 @@ $ramPercent = 0
 $flashRemainingKB = 0
 $ramRemainingKB = 0
 
-# STM32L496xx memory map
+# Default fallbacks
 $flashTotalKB = 2048   # 2 MB Flash
 $ramTotalKB = 320      # 320 KB RAM
+
+# Search for the linker script to dynamically extract memory sizes
+$ldFile = Get-ChildItem -Path $projectDir -Filter "*_flash.ld" -File -Recurse | Select-Object -First 1
+if ($ldFile) {
+    $ldContent = Get-Content $ldFile.FullName
+    foreach ($line in $ldContent) {
+        if ($line -match "\bFLASH\b\s*\(\w+\)\s*:\s*ORIGIN\s*=\s*\w+,\s*LENGTH\s*=\s*(\d+)\s*([KM])") {
+            $val = [int]$Matches[1]
+            $unit = $Matches[2].ToUpper()
+            $flashTotalKB = if ($unit -eq "M") { $val * 1024 } else { $val }
+        }
+        if ($line -match "\bRAM\b\s*\(\w+\)\s*:\s*ORIGIN\s*=\s*\w+,\s*LENGTH\s*=\s*(\d+)\s*([KM])") {
+            $val = [int]$Matches[1]
+            $unit = $Matches[2].ToUpper()
+            $ramTotalKB = if ($unit -eq "M") { $val * 1024 } else { $val }
+        }
+    }
+}
 
 foreach ($line in $buildOutput) {
     if ($line -match '^\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+([0-9a-f]+)\s+([\w.-]+)') {
@@ -241,8 +266,33 @@ foreach ($line in $buildOutput) {
         $ramRemainingKB   = [math]::Round(($ramTotalKB * 1024 - $ramTotal) / 1024, 2)
         
         # Also update elfFile if it was found by size
-        if ($file -match 'stm32-project-template-v2\.elf$') {
-            $elfFile = Join-Path (Split-Path (Join-Path $projectDir $file)) $file
+        if ($file -match '\.elf$') {
+            $elfFile = Join-Path $buildTypeDir $file
+        }
+    }
+}
+
+# Fallback: if project was already built (no compilation output), directly run arm-none-eabi-size to get sizes
+if ($flashTotal -eq 0 -and (Test-Path $elfFile)) {
+    $sizeCmd = "arm-none-eabi-size"
+    $null = Get-Command $sizeCmd -ErrorAction SilentlyContinue
+    if ($?) {
+        $sizeOutput = & $sizeCmd $elfFile 2>&1
+        foreach ($line in $sizeOutput) {
+            if ($line -match '^\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+([0-9a-f]+)\s+([\w.-]+)') {
+                $text = [int]$Matches[1]
+                $data = [int]$Matches[2]
+                $bss  = [int]$Matches[3]
+                
+                $flashTotal = $text + $data
+                $ramTotal   = $data + $bss
+                $flashKB = [math]::Round($flashTotal / 1024, 2)
+                $ramKB   = [math]::Round($ramTotal / 1024, 2)
+                $flashPercent = [math]::Round(($flashTotal / ($flashTotalKB * 1024)) * 100, 1)
+                $ramPercent   = [math]::Round(($ramTotal / ($ramTotalKB * 1024)) * 100, 1)
+                $flashRemainingKB = [math]::Round(($flashTotalKB * 1024 - $flashTotal) / 1024, 2)
+                $ramRemainingKB   = [math]::Round(($ramTotalKB * 1024 - $ramTotal) / 1024, 2)
+            }
         }
     }
 }

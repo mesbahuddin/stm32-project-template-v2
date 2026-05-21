@@ -1,6 +1,6 @@
 # Set linker script
 set(LINKER_SCRIPT
-    ${PROJECT_SOURCE_DIR}/src/bsp/core/stm32l496xx_flash.ld
+    ${PROJECT_SOURCE_DIR}/stm32l496xx_flash.ld
 )
 if(NOT EXISTS ${LINKER_SCRIPT})
     message(FATAL_ERROR "Linker script \"${LINKER_SCRIPT}\" does not exist!")
@@ -53,14 +53,35 @@ set(LINKER_FLAGS
     "-Wl,--print-memory-usage"
 )
 
-# Enable link time optimization for MinSizeRel builds
-if(CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
-    list(APPEND C_FLAGS
-        "-flto"
-    )
-    list(APPEND LINKER_FLAGS
-        "-flto"
-    )
+# Build type specific optimization flags with LTO support
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    # Debug: No optimization, full debug info
+    list(APPEND C_FLAGS "-O0" "-g3")
+    list(APPEND CXX_FLAGS "-O0" "-g3")
+    # No LTO for Debug (slower compilation, debug symbols preferred)
+elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+    # Release: Maximum optimization, no debug info
+    list(APPEND C_FLAGS "-O3")
+    list(APPEND CXX_FLAGS "-O3")
+    # Enable LTO for Release (performance optimization)
+    list(APPEND C_FLAGS "-flto")
+    list(APPEND CXX_FLAGS "-flto")
+    list(APPEND LINKER_FLAGS "-flto")
+    set_property(GLOBAL PROPERTY LTO_ENABLED TRUE)
+elseif(CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
+    # MinSizeRel: Optimize for size, no debug info
+    list(APPEND C_FLAGS "-Os")
+    list(APPEND CXX_FLAGS "-Os")
+    # Enable LTO for MinSizeRel (critical for size reduction)
+    list(APPEND C_FLAGS "-flto")
+    list(APPEND CXX_FLAGS "-flto")
+    list(APPEND LINKER_FLAGS "-flto")
+    set_property(GLOBAL PROPERTY LTO_ENABLED TRUE)
+elseif(CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    # RelWithDebInfo: Balanced optimization with debug info
+    list(APPEND C_FLAGS "-O2" "-g")
+    list(APPEND CXX_FLAGS "-O2" "-g")
+    # No LTO for RelWithDebInfo (debug symbols + LTO can conflict)
 endif()
 
 # For all languages:

@@ -1,203 +1,103 @@
 # STM32 Firmware Development Scripts
 
-This directory contains PowerShell scripts for building, flashing, and monitoring the STM32 firmware.
+This directory contains dual-suite developer tools designed for maximum ease of use depending on your operating system, structured into dedicated subdirectories:
+1. **Windows Native (`scripts/powershell/`)**: Modern Windows-native PowerShell scripts (`.ps1`) for optimal compilation, dynamic memory audits from linker scripts, and robust toolchain discovery without virtual machine/WSL boundaries.
+2. **Cross-Platform POSIX (`scripts/bash/`)**: Universal Bash scripts (`.sh`) designed for macOS, Linux, WSL, Git Bash, or other POSIX shell environments.
+3. **Shared Helper Tools (`scripts/`)**: Platform-independent Python scripts for serial monitoring, code formatting, and CubeMX migrations.
 
-## Quick Start
+---
 
-### Option 1: Interactive Menu (Recommended for beginners)
+## 📁 Directory Structure
+```text
+scripts/
+├── bash/                    <- Cross-platform POSIX Bash suite (.sh)
+│   ├── config.sh            <- Generates build preset parameters
+│   ├── build.sh             <- Compiles firmware using CMake presets
+│   ├── flash.sh             <- Flashes MCU via JLink / STLink / DFU
+│   ├── clean.sh             <- Wipes build folders and settings
+│   └── stm32-dev.sh         <- Master Bash interactive developer menu
+│
+├── powershell/              <- Windows-native PowerShell 5.1+ suite (.ps1)
+│   ├── config.ps1           <- Generates build preset parameters
+│   ├── build.ps1            <- Compiles and performs dynamic linker memory audits
+│   ├── flash.ps1            <- Flashes MCU (robust STLink, JLink, or DFU paths)
+│   ├── clean.ps1            <- Wipes build folders and settings
+│   ├── monitor.ps1          <- Native PowerShell Serial COM Monitor
+│   ├── flash_monitor.ps1    <- Combined flash and COM serial monitor script
+│   └── stm32-dev.ps1        <- Master PowerShell interactive developer menu
+│
+├── clang_format.py          <- Code formatter helper
+├── migrate_project.py       <- Unified idempotent project migrator
+├── monitor.py               <- Cross-platform serial monitor tool
+└── README.md                <- Document reference
+```
+
+---
+
+## ⚡ Quick Start (Windows PowerShell)
+
+If you are developing natively on Windows (highly recommended for automatic USB device detection), use the PowerShell suite:
+
+### Option 1: Interactive Menu (Recommended)
 ```powershell
-cd scripts
+cd scripts/powershell
 .\stm32-dev.ps1
 ```
-This launches a menu-driven interface for all operations.
+This launches a native, high-performance interactive menu dashboard for all development operations.
 
-### Option 2: Individual Scripts (Recommended for advanced users)
+### Option 2: Individual Scripts
 ```powershell
-cd scripts
-
-# 1. Configure
-.\config.ps1 -BuildType Debug
-
-# 2. Build
+cd scripts/powershell
+.\config.ps1 Debug
 .\build.ps1
-
-# 3. Flash to device
-.\flash.ps1
-
-# 4. Monitor serial output
+.\flash.ps1 -Interface STLink
 .\monitor.ps1
 ```
 
-## Script Reference
+---
 
-### stm32-dev.ps1 - Master Menu
-Interactive menu interface combining all development operations.
+## 🐧 Quick Start (macOS, Linux, WSL, Git Bash)
 
-```powershell
-.\stm32-dev.ps1              # Launch menu
-.\stm32-dev.ps1 -Command build # Run specific command
+If you are on Linux, macOS, or running in a POSIX container, use the Bash suite:
+
+### Option 1: Interactive Menu (Recommended)
+```bash
+cd scripts/bash
+./stm32-dev.sh
 ```
 
-### config.ps1 - Configure Build
-Sets up build configuration.
+### Option 2: Individual Scripts (For Automation & Advanced Workflows)
+```bash
+cd scripts/bash
 
-**Parameters:**
-- `-BuildType` : Debug or Release
+# 1. Configure Build profile (Debug, Release, MinSizeRel, RelWithDebInfo)
+./config.sh Debug
 
-**Examples:**
-```powershell
-.\config.ps1 -BuildType Debug
-.\config.ps1 -BuildType Release
+# 2. Build / Compile firmware
+./build.sh
+
+# 3. Flash to target MCU
+./flash.sh -i JLink
+
+# 4. Launch serial monitor
+python3 ../monitor.py
 ```
 
-### build.ps1 - Compile Firmware
-Compiles the firmware using CMake presets.
+---
 
-**Parameters:**
-- `-Clean` : Clean build directory first
-- `-Jobs` : Number of parallel jobs (default: auto-detect)
+## 🛠️ Toolchain & Host Setup Requirements
 
-**Examples:**
-```powershell
-.\build.ps1                  # Standard build
-.\build.ps1 -Clean           # Clean rebuild
-.\build.ps1 -Jobs 8          # Use 8 parallel jobs
-```
+### Windows (Primary Host)
+All tools (`cmake`, `ninja`, `arm-none-eabi-gcc`, etc.) must be in your system Environment PATH.
 
-### flash.ps1 - Program Device
-Flashes firmware to STM32 device.
+### Segger J-Link Flashing
+Requires the Segger J-Link software suite. The scripts search standard installations:
+- Windows: `C:\Program Files\SEGGER\JLink`
+- macOS: `/Applications`
+- Linux: `/opt/SEGGER`
 
-**Parameters:**
-- `-Interface` : Programming interface (JLink (default), STLink, DFU)
-- `-File` : Firmware file path (auto-detect if not specified)
-- `-Verify` : Verify after programming
-- `-Reset` : Reset device after programming (default: true)
-
-**Examples:**
-```powershell
-.\flash.ps1                          # Auto-detect file, J-Link
-.\flash.ps1 -Interface DFU           # Use USB DFU mode
-.\flash.ps1 -File C:\firmware.hex    # Specific file
-.\flash.ps1 -Verify                  # With verification
-```
-
-**Requirements:**
-- **J-Link**: J-Link software (https://www.segger.com/downloads/jlink/)
-- **ST-Link**: STM32CubeProgrammer or st-link tools
-- **DFU**: STM32CubeProgrammer, device in DFU mode
-
-### flash_monitor.ps1 - Flash and Monitor
-Combines flashing and serial monitoring in one step.
-
-**Parameters:**
-- `-Port` : COM port (auto-detect if not specified)
-- `-BaudRate` : Baud rate (default: 115200)
-- `-Timestamp` : Add timestamps to output
-- `-LogFile` : Save output to file
-- `-FlashMethod` : Flash method (jlink (default), stlink, dfu)
-
-**Examples:**
-```powershell
-.\flash_monitor.ps1
-.\flash_monitor.ps1 -Timestamp -LogFile output.log
-```
-
-### monitor.ps1 - View Serial Output
-Monitors serial output from the device.
-
-**Parameters:**
-- `-Port` : COM port (auto-detect if not specified)
-- `-BaudRate` : Baud rate (default: 115200)
-- `-LogFile` : Save output to file
-- `-Timestamp` : Add timestamps to output
-
-**Examples:**
-```powershell
-.\monitor.ps1                        # Auto-detect port
-.\monitor.ps1 -Port COM3             # Specific port
-.\monitor.ps1 -LogFile output.log    # With logging
-.\monitor.ps1 -Timestamp             # With timestamps
-```
-
-### clean.ps1 - Clean Build Artifacts
-Removes build directory and temporary files.
-
-**Parameters:**
-- `-All` : Also remove configuration file
-
-**Examples:**
-```powershell
-.\clean.ps1              # Clean build only
-.\clean.ps1 -All         # Full clean including config
-```
-
-## Development Workflow
-
-### Standard Workflow
-
-```powershell
-# 1. Configure
-.\config.ps1 -BuildType Debug
-
-# 2. Build
-.\build.ps1
-
-# 3. Flash
-.\flash.ps1
-
-# 4. Monitor output
-.\monitor.ps1
-```
-
-### Quick Build + Flash + Monitor
-
-```powershell
-# All in one step
-.\flash_monitor.ps1
-```
-
-## Build Configuration
-
-The configuration file is auto-generated by `config.ps1` and stored in `build_config.ps1`.
-Build type determines the CMake preset used (`Debug` or `Release`).
-
-## Troubleshooting
-
-### "Build configuration not found!"
-Run `config.ps1` first to set up the build.
-
-### "No J-Link tool found!"
-Install J-Link software:
-https://www.segger.com/downloads/jlink/
-
-### "Could not auto-detect COM port"
-1. Connect the STM32 device
-2. Check Device Manager for COM port number
-3. Specify manually: `monitor.ps1 -Port COM3`
-
-### "CMake configuration failed"
-Ensure CMake is installed and in PATH:
-```powershell
-cmake --version
-```
-
-## File Locations
-
-- Build output: `..\build\Debug\` or `..\build\Release\`
-- Config file: `build_config.ps1` (auto-generated)
-- Logs: Specified with `-LogFile` parameter
-
-## Requirements
-
-- PowerShell 5.0 or later
-- CMake 3.22 or later
-- ARM GCC toolchain
-- J-Link software (preferred for flashing)
-
-## Tips
-
-1. **Use Tab completion**: Scripts support tab completion for parameters
-2. **Check config first**: Run `stm32-dev.ps1` to see current configuration
-3. **Monitor with logging**: Use `monitor.ps1 -LogFile data.log -Timestamp` for data capture
-4. **Quick rebuild**: After code changes, just run `build.ps1` (config is preserved)
-5. **Full clean**: Use `clean.ps1 -All` if switching between major configurations
+### ST-Link / DFU Flashing
+Requires the STM32CubeProgrammer software suite. The PowerShell suite features a robust `Find-CubeProgrammer` engine which automatically searches:
+- Custom installations/versioned CLT toolchains (`C:\ST\STM32CubeCLT_*` in descending version order)
+- Environment system `PATH`
+- Standard `Program Files` and `Program Files (x86)` installations
