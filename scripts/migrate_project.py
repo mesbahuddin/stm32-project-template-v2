@@ -336,41 +336,56 @@ class CombinedSTM32Migrator:
 
         actual_dirs = os.listdir(self.target_dir) if os.path.exists(self.target_dir) else []
 
-        if not os.path.exists(core_src) and "Src" in actual_dirs:
-            core_src = orig_src
-            print("Using root Src/ as core source directory.")
-        if not os.path.exists(core_inc) and "Inc" in actual_dirs:
-            core_inc = orig_inc
-            print("Using root Inc/ as core include directory.")
+        # Determine which CubeMX layout is used
+        if os.path.exists(core_src):
+            cube_src = core_src
+            cube_inc = core_inc
+            is_advanced = True
+            print("CubeMX layout: Core/Src/ + Core/Inc/ (AdvancedFolderStructure=true)")
+        elif "Src" in actual_dirs:
+            cube_src = orig_src
+            cube_inc = orig_inc
+            is_advanced = False
+            print("CubeMX layout: root Src/ + Inc/ (flat)")
+        else:
+            cube_src = orig_src
+            cube_inc = orig_inc
+            is_advanced = False
+            print("Warning: No CubeMX source or include directory found.")
 
         final_src = os.path.join(self.target_dir, "src")
         dirs_to_create = ["bsp/startup", "bsp/core", "bsp/brd", "app", "utils"]
         for d in dirs_to_create:
             os.makedirs(os.path.join(final_src, d), exist_ok=True)
 
-        # Move startup scripts
+        # Move startup scripts — search project root only (not lib/, cmake/, or final src/)
         s_files = glob.glob(os.path.join(self.target_dir, "**", "startup_*.s"), recursive=True)
         for s_file in s_files:
-            if "lib" in s_file or "cmake" in s_file or "src" in s_file: continue
+            rel = os.path.relpath(s_file, self.target_dir)
+            # Skip files already in our target src/ or in lib/ or cmake/
+            if rel.startswith("src" + os.sep) or rel.startswith("lib" + os.sep) or rel.startswith("cmake" + os.sep):
+                continue
             self._move_file(s_file, os.path.join(final_src, "bsp/startup"))
             print(f"Moved {os.path.basename(s_file)} to src/bsp/startup/")
 
-        # Move linker scripts
+        # Move linker scripts to project root
         ld_files = glob.glob(os.path.join(self.target_dir, "**", "*_flash.ld"), recursive=True)
         for ld_file in ld_files:
-            if "lib" in ld_file or "cmake" in ld_file or "src" in ld_file: continue
+            rel = os.path.relpath(ld_file, self.target_dir)
+            if rel.startswith("lib" + os.sep) or rel.startswith("cmake" + os.sep) or rel.startswith("src" + os.sep):
+                continue
             if os.path.dirname(ld_file) != self.target_dir:
                  shutil.move(ld_file, os.path.join(self.target_dir, os.path.basename(ld_file)))
                  print(f"Moved {os.path.basename(ld_file)} to project root")
 
         # Move main files to src/app/
-        self._move_file(os.path.join(core_src, "main.c"), os.path.join(final_src, "app"))
-        self._move_file(os.path.join(core_inc, "main.h"), os.path.join(final_src, "app"))
+        self._move_file(os.path.join(cube_src, "main.c"), os.path.join(final_src, "app"))
+        self._move_file(os.path.join(cube_inc, "main.h"), os.path.join(final_src, "app"))
 
         core_patterns = ["gpio", "dma", "usart", "spi", "sdio", "tim", "adc", "rcc", "cortex", "flash", "sysmem", "syscalls", "stm32*_it", "stm32*_hal_msp", "system_stm32*", "stm32*_hal_conf"]
         brd_patterns = ["fatfs", "bsp_driver", "sd_diskio", "usb_device", "usbd_conf", "usbd_desc", "usbd_cdc_if"]
 
-        for d in [core_src, core_inc]:
+        for d in [cube_src, cube_inc]:
             if not os.path.exists(d): continue
             for file in os.listdir(d):
                 filepath = os.path.join(d, file)
@@ -396,10 +411,33 @@ class CombinedSTM32Migrator:
                     self._move_file(filepath, os.path.join(final_src, "app"))
                     self.app_files.append(file)
         
-        # Cleanup original directories
-        for d in [orig_src, orig_inc, core_src, core_inc]:
-            if os.path.exists(d) and not os.listdir(d):
-                os.rmdir(d)
+        # Cleanup CubeMX original directories — force remove regardless of emptiness
+        for d in [cube_src, cube_inc]:
+            if os.path.exists(d) and os.path.isdir(d):
+                try:
+                    shutil.rmtree(d)
+                    print(f"Removed CubeMX directory: {d}")
+                except Exception as e:
+                    print(f"Warning: could not remove {d}: {e}")
+
+        # If using Core/Src, remove the Core/ parent too
+        if is_advanced:
+            core_dir = os.path.join(self.target_dir, "Core")
+            if os.path.exists(core_dir):
+                try:
+                    shutil.rmtree(core_dir)
+                    print("Removed CubeMX Core/ directory")
+                except Exception as e:
+                    print(f"Warning: could not remove Core/: {e}")
+
+        # Also remove root Src/ and Inc/ if they exist and are from a flat layout
+        for d in [orig_src, orig_inc]:
+            if os.path.exists(d) and os.path.isdir(d):
+                try:
+                    shutil.rmtree(d)
+                    print(f"Removed root {os.path.basename(d)}/")
+                except Exception as e:
+                    print(f"Warning: could not remove {d}: {e}")
 
         # Patch main.c warnings
         main_c_path = os.path.join(final_src, "app", "main.c")
