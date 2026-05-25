@@ -3,19 +3,35 @@ cmake_minimum_required(VERSION 3.22)
 project(lib)
 enable_language(C CXX ASM)
 
+add_library(lib STATIC)
+
+# Suppress all warnings for vendor code
+target_compile_options(lib PRIVATE "-w")
+
+target_compile_definitions(lib PRIVATE
+    STM32L496xx
+    USE_HAL_DRIVER
+)
+
 # Set include paths
-SET(INCLUDES_LIB_CMSIS
+set(INCLUDES_LIB_CMSIS
     CMSIS/Device/ST/STM32L4xx/Include
     CMSIS/Include
 )
 
-SET(INCLUDES_LIB_STM32L4XX_HAL_DRIVER
+set(INCLUDES_LIB_STM32L4XX_HAL_DRIVER
     STM32L4xx_HAL_Driver/Inc
     STM32L4xx_HAL_Driver/Inc/Legacy
 )
 
+target_include_directories(lib PUBLIC
+    ${INCLUDES_LIB_CMSIS}
+    ${INCLUDES_LIB_STM32L4XX_HAL_DRIVER}
+    ${CMAKE_SOURCE_DIR}/src/bsp/core
+)
+
 # Set source files
-SET(SOURCES_LIB_STM32L4XX_HAL_Driver
+set(SOURCES_LIB_STM32L4XX_HAL_Driver
     STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_cortex.c
     STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_dma.c
     STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_exti.c
@@ -32,14 +48,7 @@ SET(SOURCES_LIB_STM32L4XX_HAL_Driver
     STM32L4xx_HAL_Driver/Src/stm32l4xx_hal.c
 )
 
-add_library(lib INTERFACE)
-
-target_include_directories(lib INTERFACE
-    ${INCLUDES_LIB_CMSIS}
-    ${INCLUDES_LIB_STM32L4XX_HAL_DRIVER}
-)
-
-target_sources(lib INTERFACE
+target_sources(lib PRIVATE
     ${SOURCES_LIB_STM32L4XX_HAL_Driver}
 )
 

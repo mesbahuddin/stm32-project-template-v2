@@ -40,7 +40,6 @@ add_subdirectory(lib)
 set(DEFINES
     STM32L496xx
     USE_HAL_DRIVER
-    USE_FULL_ASSERT
     $<IF:$<CONFIG:Debug>,DEBUG,NDEBUG>
 )
 
@@ -89,22 +88,21 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 )
 
 # Specify libraries to link
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
-    lib
-)
-
-# CRITICAL: LTO + STATIC library linking handling
-# For MinSizeRel and Release with LTO, we need --whole-archive to prevent
-# LTO from removing needed symbols from the STATIC library
+# For Release and MinSizeRel with LTO, use whole-archive to prevent LTO
+# from stripping needed symbols from the STATIC vendor library.
 if(CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
     message(STATUS "MinSizeRel: Using whole-archive for LTO compatibility")
     target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
         "-Wl,--whole-archive" lib "-Wl,--no-whole-archive"
     )
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-    # Release: Use whole-archive for performance optimization with LTO
+    message(STATUS "Release: Using whole-archive for LTO compatibility")
     target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
         "-Wl,--whole-archive" lib "-Wl,--no-whole-archive"
+    )
+else()
+    target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
+        lib
     )
 endif()
 
@@ -217,3 +215,4 @@ if(CMAKE_DUMP_VARIABLES)
         message(STATUS "${_variableName}=${${_variableName}}")
     endforeach()
 endif()
+

@@ -71,15 +71,17 @@ try {
     $interface = "JLink"
     if ($FlashMethod -eq "stlink") { $interface = "STLink" }
     elseif ($FlashMethod -eq "dfu") { $interface = "DFU" }
-    $FlashArgs = @{ Interface = $interface }
-    & "$ScriptDir\flash.ps1" @FlashArgs
-    
+    if ($interface) { & "$ScriptDir\flash.ps1" -Interface $interface } else { & "$ScriptDir\flash.ps1" }
+
     if ($LASTEXITCODE -ne 0) {
         throw "Flash operation failed with exit code $LASTEXITCODE"
     }
 }
 catch {
-    Write-Host "ERROR: Flash failed - $_" -ForegroundColor $Red
+    Write-Host "ERROR: $_" -ForegroundColor $Red
+    if ($_.Exception.ErrorRecord) {
+        Write-Host "Details: $($_.Exception.ErrorRecord)" -ForegroundColor $Red
+    }
     exit 1
 }
 
@@ -94,31 +96,31 @@ Start-Sleep -Seconds 2
 # Step 3: Auto-detect COM port if not specified
 if (-not $Port) {
     Write-Host "Auto-detecting COM port..." -ForegroundColor $Yellow
-    
-    $comPorts = Get-PnpDevice -Class "Ports" -ErrorAction SilentlyContinue | 
-        Where-Object { $_.Status -eq "OK" } |
-        ForEach-Object {
-            $match = $_.FriendlyName | Select-String -Pattern "\(COM(\d+)\)"
-            if ($match) {
-                $match.Matches.Groups[1].Value
-            }
-        }
-    
-    # Look for STM32 or USB Serial
-    $stm32Port = Get-PnpDevice -Class "Ports" -ErrorAction SilentlyContinue | 
-        Where-Object { $_.FriendlyName -match "STM32|USB Serial" -and $_.Status -eq "OK" } |
+
+    # Try multiple methods to find the port
+    $stm32Port = $null
+
+    # Method 1: Get-PnpDevice (requires appropriate permissions)
+    $stm32Port = Get-PnpDevice -Class "Ports" -ErrorAction SilentlyContinue |
+        Where-Object { $_.FriendlyName -match "STM32|USB Serial|Virtual COM" -and $_.Status -eq "OK" } |
         Select-Object -First 1 |
         ForEach-Object {
             $match = $_.FriendlyName | Select-String -Pattern "\(COM(\d+)\)"
             if ($match) { "COM" + $match.Matches.Groups[1].Value }
         }
-    
+
+    # Method 2: [System.IO.Ports.SerialPort]::GetPortNames() as fallback
+    if (-not $stm32Port) {
+        $ports = [System.IO.Ports.SerialPort]::GetPortNames()
+        if ($ports.Count -gt 0) {
+            $stm32Port = $ports[0]
+            Write-Host "Using first available port: $stm32Port" -ForegroundColor $Yellow
+        }
+    }
+
     if ($stm32Port) {
         $Port = $stm32Port
-        Write-Host "Found STM32 device on $Port" -ForegroundColor $Green
-    } elseif ($comPorts) {
-        $Port = "COM" + ($comPorts | Select-Object -First 1)
-        Write-Host "Using available port: $Port" -ForegroundColor $Yellow
+        Write-Host "Using port: $Port" -ForegroundColor $Green
     } else {
         Write-Host "ERROR: No COM ports found!" -ForegroundColor $Red
         Write-Host "Please specify port manually with -Port parameter" -ForegroundColor $Yellow

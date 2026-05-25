@@ -25,6 +25,7 @@ class CombinedSTM32Migrator:
         self.core_files = []
         self.brd_files = []
         self.app_files = []
+        self.uart_instances = []   # list of dicts: { "handle": "huart1", "instance": "USART1", "baud": 115200 }
 
         # MCU Architecture configurations
         self.mcu_architectures = {
@@ -69,13 +70,20 @@ class CombinedSTM32Migrator:
         self._analyze_project()
         self._isolate_vendor_code()
         self._reorganize_source()
+        self._generate_utility_files()
+        self._inject_custom_code()
         self._setup_infrastructure()
         self._generate_build_guide()
         
+        # Update the version string to v4
         print("\nEnhanced migration complete!")
         print(f"[OK] Dynamic MCU family configuration applied: {self.mcu_family or 'Unknown'}")
         print(f"[OK] LTO-compatible static library structures established")
         print(f"[OK] MinSizeRel and Release LTO whole-archive configurations set up")
+        print(f"[OK] Utility files (log, error_handler) generated")
+        print(f"[OK] UART-aware code injected into USER CODE blocks")
+        if self.uart_instances:
+            print(f"[OK] printf() redirected to {self.uart_instances[0]['handle']}")
         print(f"Read HOW_TO_BUILD.md for build instructions.")
 
     def _analyze_project(self):
@@ -91,6 +99,58 @@ class CombinedSTM32Migrator:
                     elif line.startswith("Mcu.UserName="):
                         self.mcu_name = line.strip().split('=')[1]
             print(f"Detected MCU Family: {self.mcu_family}, Name: {self.mcu_name}")
+
+            # Parse UART peripherals from .ioc
+            # .ioc format examples:
+            #   Mcu.IP13=USART1              (IP listing)
+            #   PA9.Signal=USART1_TX         (pin signal assignment)
+            #   USART1.IPParameters=...      (USART config block)
+            #   USART1.BaudRate=115200       (baud rate, if set)
+            self.uart_instances = []
+            with open(ioc_files[0], 'r', encoding='utf-8', errors='ignore') as f:
+                ioc_lines = f.readlines()
+            
+            uart_names = set()
+            for line in ioc_lines:
+                line = line.strip()
+                # 1) Detect UART from Mcu.IP lines: Mcu.IP13=USART1
+                m = re.match(r'Mcu\.IP\d+=(USART\d|LPUART1)\s*$', line)
+                if m:
+                    uart_names.add(m.group(1))
+                # 2) Detect from pin signal lines: PA9.Signal=USART1_TX
+                m = re.match(r'\w+\.Signal=(USART\d|LPUART1)_(TX|RX)\s*$', line)
+                if m:
+                    uart_names.add(m.group(1))
+                # 3) Detect from IPParameters lines: USART1.IPParameters=...
+                m = re.match(r'(USART\d|LPUART1)\.IPParameters=', line)
+                if m:
+                    uart_names.add(m.group(1))
+
+            # 4) Collect BaudRate for each detected UART
+            uart_bauds = {}
+            for line in ioc_lines:
+                m = re.match(r'(USART\d|LPUART1)\.BaudRate=(\d+)', line)
+                if m:
+                    uart_bauds[m.group(1)] = int(m.group(2))
+
+            for name in sorted(uart_names):
+                # Derive HAL handle: USART1 -> huart1, LPUART1 -> hlpuart1
+                if name.startswith("USART"):
+                    handle = "huart" + name[5:]
+                else:
+                    handle = "h" + name.lower()
+                baud = uart_bauds.get(name, 115200)
+                self.uart_instances.append({
+                    "handle": handle,
+                    "instance": name,
+                    "baud": baud
+                })
+            
+            if self.uart_instances:
+                for u in self.uart_instances:
+                    print(f"  Detected UART: {u['handle']} ({u['instance']}, {u['baud']} baud)")
+            else:
+                print("  No UART peripherals detected in .ioc.")
 
         ld_files = glob.glob(os.path.join(self.target_dir, "**", "*_flash.ld"), recursive=True)
         if ld_files:
@@ -303,9 +363,9 @@ class CombinedSTM32Migrator:
                  shutil.move(ld_file, os.path.join(self.target_dir, os.path.basename(ld_file)))
                  print(f"Moved {os.path.basename(ld_file)} to project root")
 
-        # Move main files
-        self._move_file(os.path.join(core_src, "main.c"), final_src)
-        self._move_file(os.path.join(core_inc, "main.h"), final_src)
+        # Move main files to src/app/
+        self._move_file(os.path.join(core_src, "main.c"), os.path.join(final_src, "app"))
+        self._move_file(os.path.join(core_inc, "main.h"), os.path.join(final_src, "app"))
 
         core_patterns = ["gpio", "dma", "usart", "spi", "sdio", "tim", "adc", "rcc", "cortex", "flash", "sysmem", "syscalls", "stm32*_it", "stm32*_hal_msp", "system_stm32*", "stm32*_hal_conf"]
         brd_patterns = ["fatfs", "bsp_driver", "sd_diskio", "usb_device", "usbd_conf", "usbd_desc", "usbd_cdc_if"]
@@ -342,7 +402,7 @@ class CombinedSTM32Migrator:
                 os.rmdir(d)
 
         # Patch main.c warnings
-        main_c_path = os.path.join(final_src, "main.c")
+        main_c_path = os.path.join(final_src, "app", "main.c")
         if os.path.exists(main_c_path):
             with open(main_c_path, "r", encoding="utf-8", errors="ignore") as f:
                 m_content = f.read()
@@ -356,8 +416,9 @@ class CombinedSTM32Migrator:
                     f.write(m_content)
                 print("Patched main.c assert_failed")
             else:
+                # Regex fallback handles variations in CubeMX output (comment format, \r\n line endings)
                 m_content = re.sub(
-                    r'void assert_failed\(uint8_t \*file, uint32_t line\)\s*{\s*/\* USER CODE BEGIN 6 \*/.*?/\* USER CODE END 6 \*/\s*}',
+                    r'void assert_failed\(uint8_t \*file, uint32_t line\)[\s\S]*?/\* USER CODE BEGIN 6 \*/[\s\S]*?/\* USER CODE END 6 \*/[\s\S]*?\}',
                     new_body,
                     m_content,
                     flags=re.DOTALL
@@ -370,8 +431,280 @@ class CombinedSTM32Migrator:
         print(f"Moved {len(self.brd_files)} files to src/bsp/brd/")
         print(f"Moved {len(self.app_files)} files to src/app/")
 
+    def _generate_utility_files(self):
+        """Create log.h, log.c, error_handler.h in src/utils/."""
+        print("\n--- Phase D: Generating Utility Files ---")
+        utils_dir = os.path.join(self.target_dir, "src", "utils")
+        os.makedirs(utils_dir, exist_ok=True)
+
+        # Determine the UART handle to use
+        uart_handle = "huart1"
+        uart_instance = "USART1"
+        if self.uart_instances:
+            u = self.uart_instances[0]
+            uart_handle = u["handle"]
+            uart_instance = u["instance"]
+
+        # Determine the HAL header based on MCU family
+        hal_header = "stm32f4xx_hal.h"
+        if self.mcu_family:
+            hal_header = f"{self.mcu_family.lower()}xx_hal.h"
+
+        log_h_path = os.path.join(utils_dir, "log.h")
+        if not os.path.exists(log_h_path):
+            with open(log_h_path, "w", encoding="utf-8") as f:
+                f.write(f'''#ifndef INC_UTILS_LOG_H_
+#define INC_UTILS_LOG_H_
+
+#include <stdint.h>
+#include <stdbool.h>
+#include <stddef.h>
+
+void LogInit(void);
+bool LogWriteByte(const uint8_t byte);
+void LogFlush(void);
+
+#endif /* INC_UTILS_LOG_H_ */
+''')
+            print("  Created src/utils/log.h")
+
+        log_c_path = os.path.join(utils_dir, "log.c")
+        if not os.path.exists(log_c_path):
+            with open(log_c_path, "w", encoding="utf-8") as f:
+                f.write(f'''#include "utils/log.h"
+#include "{hal_header}"
+
+#define LOG_RING_BUFFER_SIZE  512
+
+static volatile uint8_t  ring_buf[LOG_RING_BUFFER_SIZE];
+static volatile uint16_t ring_head = 0;
+static volatile uint16_t ring_tail = 0;
+static volatile bool     tx_busy   = false;
+
+extern UART_HandleTypeDef {uart_handle};
+
+void LogInit(void)
+{{
+    ring_head = 0;
+    ring_tail = 0;
+    tx_busy   = false;
+}}
+
+bool LogWriteByte(const uint8_t byte)
+{{
+    uint16_t next = (ring_head + 1) % LOG_RING_BUFFER_SIZE;
+    if (next == ring_tail)
+    {{
+        return false;
+    }}
+    ring_buf[ring_head] = byte;
+    ring_head = next;
+    return true;
+}}
+
+void LogFlush(void)
+{{
+    if (tx_busy)
+    {{
+        return;
+    }}
+    if (ring_head == ring_tail)
+    {{
+        return;
+    }}
+    tx_busy = true;
+    uint16_t count;
+    if (ring_head > ring_tail)
+    {{
+        count = ring_head - ring_tail;
+    }}
+    else
+    {{
+        count = LOG_RING_BUFFER_SIZE - ring_tail;
+    }}
+    HAL_UART_Transmit_IT(&{uart_handle},
+                         (uint8_t *)&ring_buf[ring_tail],
+                         count);
+}}
+
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+{{
+    if (huart->Instance != {uart_instance})
+    {{
+        return;
+    }}
+    uint16_t sent;
+    if (ring_head > ring_tail)
+    {{
+        sent = ring_head - ring_tail;
+    }}
+    else
+    {{
+        sent = LOG_RING_BUFFER_SIZE - ring_tail;
+    }}
+    ring_tail = (ring_tail + sent) % LOG_RING_BUFFER_SIZE;
+    tx_busy = false;
+    if (ring_head != ring_tail)
+    {{
+        LogFlush();
+    }}
+}}
+''')
+            print(f"  Created src/utils/log.c (uses {uart_handle}/{uart_instance})")
+
+        err_h_path = os.path.join(utils_dir, "error_handler.h")
+        if not os.path.exists(err_h_path):
+            with open(err_h_path, "w", encoding="utf-8") as f:
+                f.write('''#ifndef INC_UTILS_ERROR_HANDLER_H_
+#define INC_UTILS_ERROR_HANDLER_H_
+
+#include <stdint.h>
+
+void ErrorHandler(void);
+void AssertFailed(uint8_t *file, uint32_t line);
+
+#endif /* INC_UTILS_ERROR_HANDLER_H_ */
+''')
+            print("  Created src/utils/error_handler.h")
+
+    def _find_stm32_it_file(self):
+        """Find the IT file (e.g. stm32u3xx_it.c) in src/bsp/core/."""
+        it_dir = os.path.join(self.target_dir, "src", "bsp", "core")
+        if not os.path.exists(it_dir):
+            return None
+        for f in os.listdir(it_dir):
+            if f.endswith("_it.c"):
+                return os.path.join(it_dir, f)
+        return None
+
+    def _inject_custom_code(self):
+        """Inject printf redirect, LogInit, UART extern, and UART IRQ handler
+        into the CubeMX USER CODE blocks."""
+        print("\n--- Phase E: Injecting Custom Code ---")
+        uart_handle = "huart1"
+        uart_instance = "USART1"
+        if self.uart_instances:
+            u = self.uart_instances[0]
+            uart_handle = u["handle"]
+            uart_instance = u["instance"]
+
+        injected_any = False
+
+        # 1) Inject extern UART handle into main.h
+        main_h_path = os.path.join(self.target_dir, "src", "app", "main.h")
+        if os.path.exists(main_h_path):
+            with open(main_h_path, 'rb') as f:
+                data = f.read()
+            needle = b'/* USER CODE BEGIN EFP */\r\n\r\n/* USER CODE END EFP */'
+            repl = f'/* USER CODE BEGIN EFP */\r\nextern UART_HandleTypeDef {uart_handle};\r\n/* USER CODE END EFP */'.encode()
+            if needle in data:
+                data = data.replace(needle, repl, 1)
+                with open(main_h_path, 'wb') as f:
+                    f.write(data)
+                print(f"  main.h: injected extern {uart_handle}")
+                injected_any = True
+            else:
+                # Try LF-only
+                needle_lf = b'/* USER CODE BEGIN EFP */\n\n/* USER CODE END EFP */'
+                repl_lf = f'/* USER CODE BEGIN EFP */\nextern UART_HandleTypeDef {uart_handle};\n/* USER CODE END EFP */'.encode()
+                if needle_lf in data:
+                    data = data.replace(needle_lf, repl_lf, 1)
+                    with open(main_h_path, 'wb') as f:
+                        f.write(data)
+                    print(f"  main.h: injected extern {uart_handle} (LF)")
+                    injected_any = True
+                else:
+                    print(f"  main.h: USER CODE BEGIN EFP block not found, skipping")
+
+        # 2) Inject __io_putchar into main.c
+        main_c_path = os.path.join(self.target_dir, "src", "app", "main.c")
+        if os.path.exists(main_c_path):
+            with open(main_c_path, 'rb') as f:
+                data = f.read()
+
+            # 0) Inject #include <stdio.h> and #include "utils/log.h"
+            needle_incl = b'/* USER CODE BEGIN Includes */\r\n\r\n/* USER CODE END Includes */'
+            repl_incl = b'/* USER CODE BEGIN Includes */\r\n#include <stdio.h>\r\n#include "utils/log.h"\r\n/* USER CODE END Includes */'
+            if needle_incl in data:
+                data = data.replace(needle_incl, repl_incl, 1)
+                injected_any = True
+            else:
+                needle_incl_lf = b'/* USER CODE BEGIN Includes */\n\n/* USER CODE END Includes */'
+                repl_incl_lf = b'/* USER CODE BEGIN Includes */\n#include <stdio.h>\n#include "utils/log.h"\n/* USER CODE END Includes */'
+                if needle_incl_lf in data:
+                    data = data.replace(needle_incl_lf, repl_incl_lf, 1)
+                    injected_any = True
+
+            # 1) __io_putchar in USER CODE BEGIN 0
+            needle0 = b'/* USER CODE BEGIN 0 */\r\n\r\n/* USER CODE END 0 */'
+            repl0 = b'/* USER CODE BEGIN 0 */\r\n\r\n/** @brief Redirect printf() to the non-blocking log ring buffer. */\r\nint __io_putchar(int ch)\r\n{\r\n    LogWriteByte((uint8_t)ch);\r\n    LogFlush();\r\n    return ch;\r\n}\r\n\r\n/* USER CODE END 0 */'
+            if needle0 in data:
+                data = data.replace(needle0, repl0, 1)
+                injected_any = True
+            else:
+                needle0_lf = b'/* USER CODE BEGIN 0 */\n\n/* USER CODE END 0 */'
+                repl0_lf = b'/* USER CODE BEGIN 0 */\n\n/** @brief Redirect printf() to the non-blocking log ring buffer. */\nint __io_putchar(int ch)\n{\n    LogWriteByte((uint8_t)ch);\n    LogFlush();\n    return ch;\n}\n\n/* USER CODE END 0 */'
+                if needle0_lf in data:
+                    data = data.replace(needle0_lf, repl0_lf, 1)
+                    injected_any = True
+
+            # LogInit + printf in USER CODE BEGIN 2
+            needle2 = b'/* USER CODE BEGIN 2 */\r\n\r\n/* USER CODE END 2 */\r\n'
+            repl2 = f'/* USER CODE BEGIN 2 */\r\n\r\n  LogInit();\r\n  printf("Prj_SKI_Logger starting...\\r\\n");\r\n\r\n/* USER CODE END 2 */\r\n'.encode()
+            # Also try the version with a 2-space indent on the end tag
+            needle2_indent = b'/* USER CODE BEGIN 2 */\r\n\r\n  /* USER CODE END 2 */\r\n'
+            repl2_indent = f'/* USER CODE BEGIN 2 */\r\n\r\n  LogInit();\r\n  printf("Prj_SKI_Logger starting...\\r\\n");\r\n\r\n  /* USER CODE END 2 */\r\n'.encode()
+            if needle2 in data:
+                data = data.replace(needle2, repl2, 1)
+                injected_any = True
+            elif needle2_indent in data:
+                data = data.replace(needle2_indent, repl2_indent, 1)
+                injected_any = True
+            else:
+                # Try LF varieties
+                needle2_lf = b'/* USER CODE BEGIN 2 */\n\n/* USER CODE END 2 */\n'
+                repl2_lf = f'/* USER CODE BEGIN 2 */\n\n  LogInit();\n  printf("Prj_SKI_Logger starting...\\n");\n\n/* USER CODE END 2 */\n'.encode()
+                if needle2_lf in data:
+                    data = data.replace(needle2_lf, repl2_lf, 1)
+                    injected_any = True
+
+            if injected_any:
+                with open(main_c_path, 'wb') as f:
+                    f.write(data)
+                print("  main.c: injected __io_putchar, LogInit(), printf()")
+            else:
+                print("  main.c: USER CODE blocks not found (already injected?), skipping")
+
+        # 3) Inject UART IRQ handler into stm32XXxx_it.c
+        it_path = self._find_stm32_it_file()
+        if it_path:
+            with open(it_path, 'rb') as f:
+                data = f.read()
+            needle1 = b'/* USER CODE BEGIN 1 */\r\n\r\n/* USER CODE END 1 */'
+            repl1 = f'/* USER CODE BEGIN 1 */\r\n\r\n/**\r\n  * @brief This function handles {uart_instance} global interrupt.\r\n  */\r\nvoid {uart_instance}_IRQHandler(void)\r\n{{\r\n  HAL_UART_IRQHandler(&{uart_handle});\r\n}}\r\n\r\n/* USER CODE END 1 */'.encode()
+            if needle1 in data:
+                data = data.replace(needle1, repl1, 1)
+                with open(it_path, 'wb') as f:
+                    f.write(data)
+                print(f"  {os.path.basename(it_path)}: injected {uart_instance}_IRQHandler")
+                injected_any = True
+            else:
+                needle1_lf = b'/* USER CODE BEGIN 1 */\n\n/* USER CODE END 1 */'
+                repl1_lf = f'/* USER CODE BEGIN 1 */\n\n/**\n  * @brief This function handles {uart_instance} global interrupt.\n  */\nvoid {uart_instance}_IRQHandler(void)\n{{\n  HAL_UART_IRQHandler(&{uart_handle});\n}}\n\n/* USER CODE END 1 */'.encode()
+                if needle1_lf in data:
+                    data = data.replace(needle1_lf, repl1_lf, 1)
+                    with open(it_path, 'wb') as f:
+                        f.write(data)
+                    print(f"  {os.path.basename(it_path)}: injected {uart_instance}_IRQHandler (LF)")
+                    injected_any = True
+                else:
+                    print(f"  {os.path.basename(it_path)}: USER CODE BEGIN 1 not found, skipping")
+
+        if not injected_any:
+            print("  (no injections performed — files may have been previously migrated)")
+
     def _setup_infrastructure(self):
-        print("\n--- Phase D: Setting up Infrastructure ---")
+        print("\n--- Phase F: Setting up Infrastructure ---")
         
         # Copy configuration files
         for file in [".clang-format", ".clang-tidy", ".editorconfig", ".gitignore", "CMakePresets.json"]:
@@ -426,17 +759,27 @@ class CombinedSTM32Migrator:
                             f.write(s_content)
                         print("Updated .vscode/settings.json target name and header associations")
 
-                # Update helper scripts target name
+                # Update helper scripts target name and MCU references
+                # Searches both flat scripts/ and subdirectories (bash/, powershell/)
                 if directory == "scripts":
-                    for script_name in ["flash.ps1", "build.ps1"]:
-                        script_path = os.path.join(dest_dir, script_name)
-                        if os.path.exists(script_path):
-                            with open(script_path, "r", encoding="utf-8", errors="ignore") as f:
-                                s_content = f.read()
-                            s_content = s_content.replace("stm32-project-template-v2", os.path.basename(self.target_dir))
-                            with open(script_path, "w", encoding="utf-8") as f:
-                                f.write(s_content)
-                            print(f"Updated scripts/{script_name} target name")
+                    target_mcu_ref = self.mcu_name if self.mcu_name else f"{self.mcu_family}xx" if self.mcu_family else "STM32U3xx"
+                    for root, dirs, files in os.walk(dest_dir):
+                        for script_name in files:
+                            if not script_name.endswith((".ps1", ".sh", ".py")):
+                                continue
+                            script_path = os.path.join(root, script_name)
+                            try:
+                                with open(script_path, "r", encoding="utf-8", errors="ignore") as f:
+                                    s_content = f.read()
+                                s_content = s_content.replace("stm32-project-template-v2", os.path.basename(self.target_dir))
+                                s_content = s_content.replace("STM32L496ZG", target_mcu_ref)
+                                s_content = s_content.replace("STM32L496xx", target_mcu_ref)
+                                s_content = s_content.replace("stm32l496xx", target_mcu_ref.lower())
+                                with open(script_path, "w", encoding="utf-8") as f:
+                                    f.write(s_content)
+                                print(f"  Updated {os.path.relpath(script_path, dest_dir)}")
+                            except Exception as e:
+                                print(f"  Skipped {script_name}: {e}")
 
         # Generate MCU specific compiler config dynamically
         self._generate_dynamic_mcu_cmake()
@@ -460,7 +803,7 @@ class CombinedSTM32Migrator:
             content = re.sub(r'set\(DEFINES\s+.*?STM32L496xx', f'set(DEFINES\n    {mcu_define}', content, flags=re.DOTALL)
 
             # Restructure include directories
-            includes_str = "set(INCLUDES\n    ${PROJECT_SOURCE_DIR}/src\n    ${PROJECT_SOURCE_DIR}/src/bsp/core\n    ${PROJECT_SOURCE_DIR}/src/bsp/brd\n    ${PROJECT_SOURCE_DIR}/src/app\n)"
+            includes_str = "set(INCLUDES\n    ${PROJECT_SOURCE_DIR}/src\n    ${PROJECT_SOURCE_DIR}/src/bsp/core\n    ${PROJECT_SOURCE_DIR}/src/bsp/brd\n    ${PROJECT_SOURCE_DIR}/src/app\n    ${PROJECT_SOURCE_DIR}/src/utils\n)"
             if self.has_fatfs:
                 includes_str = includes_str.replace(")", "    ${PROJECT_SOURCE_DIR}/FATFS/App\n    ${PROJECT_SOURCE_DIR}/FATFS/Target\n)")
             if self.has_usb:
@@ -469,7 +812,8 @@ class CombinedSTM32Migrator:
             content = re.sub(r'set\(INCLUDES.*?^\)', includes_str, content, flags=re.MULTILINE|re.DOTALL)
 
             # Rebuild sources list
-            src_files = ["${PROJECT_SOURCE_DIR}/src/main.c"]
+            # main.c ends up in src/app/ after _reorganize_source(), not src/
+            src_files = ["${PROJECT_SOURCE_DIR}/src/app/main.c"]
             
             # Scan directories directly if they already contain files, or fall back to self.core_files
             core_dir = os.path.join(self.target_dir, "src", "bsp", "core")
@@ -491,10 +835,12 @@ class CombinedSTM32Migrator:
             app_dir = os.path.join(self.target_dir, "src", "app")
             if os.path.exists(app_dir) and os.listdir(app_dir):
                 for f in sorted(os.listdir(app_dir)):
-                    if f.endswith(".c"): src_files.append(f"${{PROJECT_SOURCE_DIR}}/src/app/{f}")
+                    if f.endswith(".c") and f != "main.c":
+                        src_files.append(f"${{PROJECT_SOURCE_DIR}}/src/app/{f}")
             else:
                 for f in self.app_files:
-                    if f.endswith(".c"): src_files.append(f"${{PROJECT_SOURCE_DIR}}/src/app/{f}")
+                    if f.endswith(".c") and f != "main.c":
+                        src_files.append(f"${{PROJECT_SOURCE_DIR}}/src/app/{f}")
             
             if self.has_fatfs:
                 fatfs_app_path = os.path.join(self.target_dir, "FATFS", "App")
@@ -519,6 +865,13 @@ class CombinedSTM32Migrator:
                     for file in os.listdir(usb_target_path):
                         if file.endswith(".c"):
                             src_files.append(f"${{PROJECT_SOURCE_DIR}}/USB_DEVICE/Target/{file}")
+
+            # Scan src/utils/ for .c files
+            utils_dir = os.path.join(self.target_dir, "src", "utils")
+            if os.path.exists(utils_dir):
+                for f in sorted(os.listdir(utils_dir)):
+                    if f.endswith(".c"):
+                        src_files.append(f"${{PROJECT_SOURCE_DIR}}/src/utils/{f}")
             
             sources_str = "set(SOURCES_C\n"
             for src in src_files:
@@ -710,7 +1063,7 @@ list(JOIN CMAKE_EXE_LINKER_FLAGS " " CMAKE_EXE_LINKER_FLAGS)
             print("Copied common.cmake")
 
     def _generate_build_guide(self):
-        print("\n--- Phase E: Generating Build Guide ---")
+        print("\n--- Phase G: Generating Build Guide ---")
         project_name = os.path.basename(self.target_dir)
         mcu_define = f"{self.mcu_family}xx"
         if self.mcu_name:
