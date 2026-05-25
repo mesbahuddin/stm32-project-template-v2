@@ -449,8 +449,6 @@ class CombinedSTM32Migrator:
                         print(f"Removed empty CubeMX directory: {d}")
                     except Exception as e:
                         print(f"Warning: could not remove {d}: {e}")
-                except Exception as e:
-                    print(f"Warning: could not remove {d}: {e}")
 
         # Patch main.c warnings
         main_c_path = os.path.join(final_src, "app", "main.c")
