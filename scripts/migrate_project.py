@@ -411,31 +411,44 @@ class CombinedSTM32Migrator:
                     self._move_file(filepath, os.path.join(final_src, "app"))
                     self.app_files.append(file)
         
-        # Cleanup CubeMX original directories — force remove regardless of emptiness
+        # Cleanup CubeMX original directories — only if completely empty
         for d in [cube_src, cube_inc]:
-            if os.path.exists(d) and os.path.isdir(d):
-                try:
-                    shutil.rmtree(d)
-                    print(f"Removed CubeMX directory: {d}")
-                except Exception as e:
-                    print(f"Warning: could not remove {d}: {e}")
+            if os.path.exists(d):
+                remaining = [f for f in os.listdir(d) if os.path.isfile(os.path.join(d, f))]
+                if not remaining:
+                    try:
+                        os.rmdir(d)
+                        print(f"Removed empty CubeMX directory: {d}")
+                    except Exception as e:
+                        print(f"Warning: could not remove empty {d}: {e}")
+                else:
+                    print(f"Kept {d} ({len(remaining)} files not moved)")
 
-        # If using Core/Src, remove the Core/ parent too
+        # If using Core/Src, remove the Core/ parent too if empty
         if is_advanced:
             core_dir = os.path.join(self.target_dir, "Core")
             if os.path.exists(core_dir):
+                remaining = []
+                for root, dirs, files in os.walk(core_dir):
+                    remaining.extend(files)
+                    break  # just top-level check
                 try:
-                    shutil.rmtree(core_dir)
-                    print("Removed CubeMX Core/ directory")
-                except Exception as e:
-                    print(f"Warning: could not remove Core/: {e}")
+                    os.rmdir(core_dir)  # only works if empty
+                    print("Removed empty Core/ directory")
+                except OSError:
+                    # Not empty — skip silently
+                    pass
 
-        # Also remove root Src/ and Inc/ if they exist and are from a flat layout
+        # Also remove root Src/ and Inc/ if empty (flat layout)
         for d in [orig_src, orig_inc]:
-            if os.path.exists(d) and os.path.isdir(d):
-                try:
-                    shutil.rmtree(d)
-                    print(f"Removed root {os.path.basename(d)}/")
+            if os.path.exists(d):
+                remaining = [f for f in os.listdir(d) if os.path.isfile(os.path.join(d, f))]
+                if not remaining:
+                    try:
+                        os.rmdir(d)
+                        print(f"Removed empty CubeMX directory: {d}")
+                    except Exception as e:
+                        print(f"Warning: could not remove {d}: {e}")
                 except Exception as e:
                     print(f"Warning: could not remove {d}: {e}")
 
